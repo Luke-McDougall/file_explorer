@@ -127,10 +127,10 @@ string_compare(String *str1, String *str2)
 
     for(u32 i = 0; i < smaller->length; i++)
     {
-        i32 diff = str1->start[i] - str2->start[i];
-        if(diff == 0) continue;
-        if(diff == 32) return true;
-        if(diff == -32) return false;
+        u8 ch1 = (str1->start[i] >= 'A' && str1->start[i] <= 'Z') ? str1->start[i] + 32 : str1->start[i];
+        u8 ch2 = (str2->start[i] >= 'A' && str2->start[i] <= 'Z') ? str2->start[i] + 32 : str2->start[i];
+        i8 diff = ch1 - ch2;
+        if(diff == 0 || diff == 32 || diff == -32) continue;
         if(diff < 0) return true;
         if(diff > 0) return false;
     }
