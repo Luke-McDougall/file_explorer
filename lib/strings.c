@@ -130,7 +130,6 @@ string_compare(String *str1, String *str2)
         u8 ch1 = (str1->start[i] >= 'A' && str1->start[i] <= 'Z') ? str1->start[i] + 32 : str1->start[i];
         u8 ch2 = (str2->start[i] >= 'A' && str2->start[i] <= 'Z') ? str2->start[i] + 32 : str2->start[i];
         i8 diff = ch1 - ch2;
-        if(diff == 0) continue;
         if(diff < 0) return true;
         if(diff > 0) return false;
     }
