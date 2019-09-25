@@ -1,5 +1,7 @@
 #include <stdint.h>
 
+#ifndef TYPES
+#define TYPES
 typedef uint8_t u8;
 typedef uint16_t u16;
 typedef uint32_t u32;
@@ -10,3 +12,7 @@ typedef int32_t i32;
 typedef int64_t i64;
 
 typedef uint32_t b32;
+
+#define true 1
+#define false 0
+#endif

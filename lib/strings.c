@@ -119,6 +119,36 @@ string_copy(String *str)
     return copy_string;
 }
 
+// Compare two strings alphabetically. Returns true if str1 is less than str2 alphabetically
+b32
+string_compare(String *str1, String *str2)
+{
+    String *smaller = str1->length < str2->length ? str1 : str2;
+
+    for(u32 i = 0; i < smaller->length; i++)
+    {
+        i32 diff = str1->start[i] - str2->start[i];
+        if(diff == 0) continue;
+        if(diff == 32) return true;
+        if(diff == -32) return false;
+        if(diff < 0) return true;
+        if(diff > 0) return false;
+    }
+    return smaller == str1;
+}
+
+char*
+string_cstring(String *str)
+{
+    char *cstring = (char*)malloc(sizeof(char) * (str->length + 1));
+    for(u32 i = 0; i < str->length; i++)
+    {
+        cstring[i] = str->start[i];
+    }
+    cstring[str->length] = '\0';
+    return cstring;
+}
+
 void
 string_free(String *str)
 {
