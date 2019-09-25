@@ -2,11 +2,12 @@
 #include <dirent.h>
 //#include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "../include/termbox.h"
 #include "../include/strings.h"
 #include "../include/types.h"
 
-#define SCROLL_SPEED 5
+#define SCROLL_SPEED 1
 
 typedef enum
 {
@@ -100,18 +101,17 @@ int pop_directory(String *path)
 
 void push_directory(String *path, String *dir)
 {
-    path->start[path->length] = '/';
-    path->length++;
+    string_push(path, '/');
     string_concat(path, dir);
 }
 
 void load_directory(char *path, Buffer *screen)
 {
     clear_tb_buffer();
-    for(u32 i = 0; i < screen->num_lines; i++)
-    {
-        string_free(screen->buffer[i].text);
-    }
+    //for(u32 i = 0; i < screen->num_lines; i++)
+    //{
+    //    string_free(screen->buffer[i].text);
+    //}
     struct dirent *dir;
     DIR *cwd = opendir(path);
     u32 index = 0;
@@ -119,13 +119,22 @@ void load_directory(char *path, Buffer *screen)
     screen->current_line = 0;
     while(dir = readdir(cwd))
     {
-        screen->buffer[index].text = string_from(dir->d_name); 
+        if(screen->buffer[index].text == NULL)
+        {
+            screen->buffer[index].text = string_from(dir->d_name); 
+        }
+        else
+        {
+            string_replace(screen->buffer[index].text, dir->d_name, strlen(dir->d_name));
+        }
         screen->buffer[index].type = dir->d_type;
         index++;
         screen->num_lines++;
     }
 
     sort_buffer(screen);
+    screen->view_range_end = tb_height();
+    screen->view_range_start = 0;
     closedir(cwd);
 }
 
@@ -143,9 +152,10 @@ void scroll(Buffer *screen, i32 lines)
 
 u32 negative_modulo(i32 max, i32 val)
 {
+    i32 result;
     for(;;)
     {
-        i32 result = max + val;
+        result = max + val;
         if(result >= 0) return (u32)result;
         val = result;
     }
@@ -199,22 +209,29 @@ int main()
         else if((u8)event.ch == 'h')
         {
             pop_directory(cur_directory);
-            char *c_dir = string_cstring(cur_directory);
-            load_directory(c_dir, &screen);
-            free(c_dir);
+            string_cstring(cur_directory, path, size);
+            load_directory(path, &screen);
         }
         else if((u8)event.ch == 'l')
         {
             push_directory(cur_directory, screen.buffer[screen.current_line].text);
-            char *c_dir = string_cstring(cur_directory);
-            load_directory(c_dir, &screen);
-            free(c_dir);
+            string_cstring(cur_directory, path, size);
+            load_directory(path, &screen);
         }
         else
         {
             break;
         }
     }
+    for(int i = 0; i < 100; i++)
+    {
+        if(screen.buffer[i].text != NULL)
+        {
+            string_free(screen.buffer[i].text);
+        }
+    }
+    string_free(cur_directory);
+    free(screen.buffer);
     tb_shutdown();
     return 0;
 }

@@ -137,16 +137,64 @@ string_compare(String *str1, String *str2)
     return smaller == str1;
 }
 
-char*
-string_cstring(String *str)
+void
+string_cstring(String *str, char *c_str, size_t length)
 {
-    char *cstring = (char*)malloc(sizeof(char) * (str->length + 1));
-    for(u32 i = 0; i < str->length; i++)
+    if(length > str->length)
     {
-        cstring[i] = str->start[i];
+        for(u32 i = 0; i < str->length; i++)
+        {
+            c_str[i] = str->start[i];
+        }
+        c_str[str->length] = '\0';
     }
-    cstring[str->length] = '\0';
-    return cstring;
+}
+
+void
+string_replace(String *str, char *c_str, size_t length)
+{
+    if(str->capacity >= length)
+    {
+        str->length = length;
+        for(u32 i = 0; i < length; i++)
+        {
+            str->start[i] = c_str[i];
+        }
+    }
+    else
+    {
+        char *new_str = (char*)malloc(sizeof(char) * length * 2);
+        for(u32 i = 0; i < length; i++)
+        {
+            new_str[i] = c_str[i];
+        }
+        str->length = length;
+        str->capacity = length * 2;
+        free(str->start);
+        str->start = new_str;
+    }
+}
+
+void
+string_push(String *str, char c)
+{
+    if(str->length < str->capacity)
+    {
+        str->start[str->length++] = c;
+    }
+    else
+    {
+        char *new_str = (char*)malloc(sizeof(char) * (str->capacity + 1) * 2);
+        for(u32 i = 0; i < str->capacity; i++)
+        {
+            new_str[i] = str->start[i];
+        }
+        new_str[str->capacity] = c;
+        str->length++;
+        str->capacity = str->length * 2;
+        free(str->start);
+        str->start = new_str;
+    }
 }
 
 void

@@ -13,5 +13,7 @@ int string_contains(String*, const char*);
 void string_to_lowercase(String*);
 String* string_copy(String*);
 b32 string_compare(String*, String*);
-char* string_cstring(String*);
+void string_cstring(String*, char*, size_t);
+void string_replace(String*, char*, size_t);
+void string_push(String*, char);
 void string_free(String*);
