@@ -197,6 +197,15 @@ string_push(String *str, char c)
 }
 
 void
+string_pop(String *str)
+{
+    if(str->length > 0)
+    {
+        str->length--;
+    }
+}
+
+void
 string_free(String *str)
 {
     free(str->start);

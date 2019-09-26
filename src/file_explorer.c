@@ -11,7 +11,6 @@
 
 #define SCROLL_SPEED 1
 
-static String *global_current_directory;
 
 typedef enum
 {
@@ -19,7 +18,7 @@ typedef enum
     SEARCH,
     NORMAL,
     VISUAL,
-} State;
+} Mode;
 
 typedef struct
 {
@@ -48,6 +47,9 @@ typedef struct
     Line *buffer;
 } Buffer;
 
+static String *global_current_directory;
+static Mode global_mode;
+
 void draw_title()
 {
     static char title[19] = "Current Directory:";
@@ -58,6 +60,15 @@ void draw_title()
     for(u32 i = 0; i < global_current_directory->length; i++)
     {
         tb_change_cell(18 + i, 0, (u32)global_current_directory->start[i], TB_WHITE, TB_BLACK);
+    }
+    tb_present();
+}
+
+void draw_query(String *query, u32 x, u32 y)
+{
+    for(u32 i = 0; i < query->length; i++)
+    {
+        tb_change_cell(x + i, y, (u32)query->start[i], TB_WHITE, TB_BLACK);
     }
     tb_present();
 }
@@ -111,6 +122,34 @@ void update_screen(Buffer *screen)
             tb_buffer[tb_index].ch = (u32)line.text->start[x];
             tb_buffer[tb_index].fg = line.is_dir ? TB_RED : TB_WHITE;
             tb_buffer[tb_index].bg = y == screen->current_line ? TB_BLUE : TB_BLACK;
+        }
+    }
+    tb_present();
+}
+
+void update_search_screen(Buffer *screen, String *query)
+{
+    draw_title();
+    u32 buffer_x = screen->x, buffer_y = screen->y; 
+    u32 buffer_width = screen->width, buffer_height = screen->height;
+    struct tb_cell *tb_buffer = tb_cell_buffer();
+    u32 end = screen->num_lines < screen->view_range_end ? screen->num_lines : screen->view_range_end;
+    static char c_query[128];
+    string_cstring(query, c_query, 128);
+    for(u32 y = screen->view_range_start; y < end; y++)
+    {
+        Line line = screen->buffer[y];
+        u32 end_x = line.text->length < buffer_width ? line.text->length : buffer_width;
+        //u64 color_mask = 0;
+        for(u32 x = 0; x < end_x; x++)
+        {
+            if(string_contains(line.text, c_query))
+            {
+                u32 tb_index = x + buffer_x + tb_width() * (y - screen->view_range_start + buffer_y);
+                tb_buffer[tb_index].ch = (u32)line.text->start[x];
+                tb_buffer[tb_index].fg = line.is_dir ? TB_RED : TB_WHITE;
+                tb_buffer[tb_index].bg = y == screen->current_line ? TB_BLUE : TB_BLACK;
+            }
         }
     }
     tb_present();
@@ -192,11 +231,14 @@ u32 negative_modulo(i32 max, i32 val)
 int main()
 {
     tb_init();
+    global_mode = NORMAL;
     struct tb_event event = {};
     char path[256];
     size_t size = 256;
     getcwd(path, size);
     global_current_directory = string_from(path);
+    String *search_query = NULL;
+
     Buffer screen = {};
     screen.buffer = (Line*)calloc(100, sizeof(Line));
     screen.y = 1;
@@ -205,57 +247,120 @@ int main()
     screen.width = tb_width();
     screen.view_range_end = screen.height;
     load_directory(path, &screen);
-    for(;;)
+    update_screen(&screen);
+    b32 running = true;
+    while(running)
     {
-        update_screen(&screen);
         tb_poll_event(&event);
-        if((u8)event.ch == 'j')
+        switch(global_mode)
         {
-            screen.current_line = (screen.current_line + 1) % screen.num_lines;
-            if(screen.current_line >= screen.view_range_end) scroll(&screen, SCROLL_SPEED);
-            if(screen.current_line == 0) 
+            case NORMAL:
             {
-                clear_tb_buffer();
-                screen.view_range_start = 0;
-                screen.view_range_end = screen.height;
-            }
-        }
-        else if((u8)event.ch == 'k')
-        {
-            if(screen.current_line <= 0)
+                if((u8)event.ch == 'j')
+                {
+                    screen.current_line = (screen.current_line + 1) % screen.num_lines;
+                    if(screen.current_line >= screen.view_range_end) scroll(&screen, SCROLL_SPEED);
+                    if(screen.current_line == 0) 
+                    {
+                        clear_tb_buffer();
+                        screen.view_range_start = 0;
+                        screen.view_range_end = screen.height;
+                    }
+                }
+                else if((u8)event.ch == 'k')
+                {
+                    if(screen.current_line <= 0)
+                    {
+                        screen.current_line = negative_modulo(screen.current_line, (i32)screen.num_lines - 1);
+                        if(screen.num_lines > tb_height())
+                        {
+                            clear_tb_buffer();
+                            screen.view_range_start = screen.num_lines - screen.height;
+                            screen.view_range_end = screen.num_lines;
+                        }
+                    }
+                    else
+                    {
+                        screen.current_line--;
+                    }
+                    if(screen.current_line < screen.view_range_start) scroll(&screen, -SCROLL_SPEED);
+                }
+                else if((u8)event.ch == 'h')
+                {
+                    pop_directory(global_current_directory);
+                    string_cstring(global_current_directory, path, size);
+                    load_directory(path, &screen);
+                }
+                else if((u8)event.ch == 'l')
+                {
+                    if(screen.buffer[screen.current_line].is_dir)
+                    {
+                        push_directory(global_current_directory, screen.buffer[screen.current_line].text);
+                        string_cstring(global_current_directory, path, size);
+                        load_directory(path, &screen);
+                    }
+                }
+                else if((u8)event.ch == 's')
+                {
+                    global_mode = SEARCH;
+                }
+                else
+                {
+                    running = false;
+                }
+                update_screen(&screen);
+            } break;
+
+            case SEARCH:
             {
-                screen.current_line = negative_modulo(screen.current_line, (i32)screen.num_lines - 1);
-                if(screen.num_lines > tb_height())
+                if((u8)event.ch >= 0x21 && (u8)event.ch <= 0x7E)
                 {
                     clear_tb_buffer();
-                    screen.view_range_start = screen.num_lines - screen.height;
-                    screen.view_range_end = screen.num_lines;
+                    if(!search_query)
+                    {
+                        search_query = string_new(20);
+                    }
+                    string_push(search_query, (u8)event.ch);
+                    draw_query(search_query, 0, screen.y + screen.height);
+                    update_search_screen(&screen, search_query);
                 }
-            }
-            else
-            {
-                screen.current_line--;
-            }
-            if(screen.current_line < screen.view_range_start) scroll(&screen, -SCROLL_SPEED);
-        }
-        else if((u8)event.ch == 'h')
-        {
-            pop_directory(global_current_directory);
-            string_cstring(global_current_directory, path, size);
-            load_directory(path, &screen);
-        }
-        else if((u8)event.ch == 'l')
-        {
-            if(screen.buffer[screen.current_line].is_dir)
-            {
-                push_directory(global_current_directory, screen.buffer[screen.current_line].text);
-                string_cstring(global_current_directory, path, size);
-                load_directory(path, &screen);
-            }
-        }
-        else
-        {
-            break;
+                else if(event.key == TB_KEY_SPACE)
+                {
+                    clear_tb_buffer();
+                    if(!search_query)
+                    {
+                        search_query = string_new(20);
+                    }
+                    string_push(search_query, ' ');
+                    draw_query(search_query, 0, screen.y + screen.height);
+                    update_search_screen(&screen, search_query);
+                }
+                else if(event.key == TB_KEY_BACKSPACE || event.key == TB_KEY_BACKSPACE2)
+                {
+                    if(search_query)
+                    {
+                        tb_change_cell(search_query->length - 1, screen.y + screen.height, (u32)' ', TB_BLACK, TB_BLACK);
+                        string_pop(search_query);
+                        tb_present();
+                    }
+                    update_search_screen(&screen, search_query);
+                }
+                else if(event.key == TB_KEY_ESC)
+                {
+                    if(search_query)
+                    {
+                        while(search_query->length > 0)
+                        {
+                            tb_change_cell(search_query->length - 1, screen.y + screen.height, (u32)' ', TB_BLACK, TB_BLACK);
+                            search_query->length--;
+                        }
+                        tb_present();
+                    }
+                    global_mode = NORMAL;
+                    clear_tb_buffer();
+                    update_screen(&screen);
+                }
+            } break;
         }
     }
     for(int i = 0; i < 100; i++)
