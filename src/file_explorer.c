@@ -212,9 +212,12 @@ int main()
         }
         else if((u8)event.ch == 'l')
         {
-            push_directory(cur_directory, screen.buffer[screen.current_line].text);
-            string_cstring(cur_directory, path, size);
-            load_directory(path, &screen);
+            if(screen.buffer[screen.current_line].is_dir)
+            {
+                push_directory(cur_directory, screen.buffer[screen.current_line].text);
+                string_cstring(cur_directory, path, size);
+                load_directory(path, &screen);
+            }
         }
         else
         {
