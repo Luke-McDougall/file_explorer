@@ -11,6 +11,8 @@
 
 #define SCROLL_SPEED 1
 
+static String *global_current_directory;
+
 typedef enum
 {
     INSERT,
@@ -27,16 +29,38 @@ typedef struct
 
 typedef struct 
 {
+    // x, y coordinates of the top left of the buffer
+    // plus width and height of the buffer.
+    u32 x;
+    u32 y;
+    u32 height;
+    u32 width;
+
     i32 current_line;
     u32 num_lines;
     u32 view_range_start;
     // All Lines before this index are directories
     u32 files_start;
     // view_range_end is one more than the last line with visible text
+    // should always be view_range_start + height
     u32 view_range_end;
 
     Line *buffer;
 } Buffer;
+
+void draw_title()
+{
+    static char title[19] = "Current Directory:";
+    for(u32 i = 0; i < 18; i++)
+    {
+        tb_change_cell(i, 0, (u32)title[i], TB_WHITE, TB_BLACK);
+    }
+    for(u32 i = 0; i < global_current_directory->length; i++)
+    {
+        tb_change_cell(18 + i, 0, (u32)global_current_directory->start[i], TB_WHITE, TB_BLACK);
+    }
+    tb_present();
+}
 
 // Bubble sort for now, might change this later if it becomes a problem
 void sort_buffer(Buffer *screen)
@@ -71,14 +95,19 @@ void clear_tb_buffer()
 
 void update_screen(Buffer *screen)
 {
+    draw_title();
+    u32 buffer_x = screen->x, buffer_y = screen->y; 
+    u32 buffer_width = screen->width, buffer_height = screen->height;
+
     struct tb_cell *tb_buffer = tb_cell_buffer();
     u32 end = screen->num_lines < screen->view_range_end ? screen->num_lines : screen->view_range_end;
     for(u32 y = screen->view_range_start; y < end; y++)
     {
         Line line = screen->buffer[y];
-        for(u32 x = 0; x < line.text->length; x++)
+        u32 end_x = line.text->length < buffer_width ? line.text->length : buffer_width;
+        for(u32 x = 0; x < end_x; x++)
         {
-            u32 tb_index = x + tb_width() * (y - screen->view_range_start);
+            u32 tb_index = x + buffer_x + tb_width() * (y - screen->view_range_start + buffer_y);
             tb_buffer[tb_index].ch = (u32)line.text->start[x];
             tb_buffer[tb_index].fg = line.is_dir ? TB_RED : TB_WHITE;
             tb_buffer[tb_index].bg = y == screen->current_line ? TB_BLUE : TB_BLACK;
@@ -131,7 +160,7 @@ void load_directory(char *path, Buffer *screen)
     }
 
     sort_buffer(screen);
-    screen->view_range_end = tb_height();
+    screen->view_range_end = screen->height;
     screen->view_range_start = 0;
     closedir(cwd);
 }
@@ -163,13 +192,17 @@ int main()
 {
     tb_init();
     struct tb_event event = {};
-    char path[128];
-    size_t size = 128;
+    char path[256];
+    size_t size = 256;
     getcwd(path, size);
-    String *cur_directory = string_from(path);
+    global_current_directory = string_from(path);
     Buffer screen = {};
     screen.buffer = (Line*)calloc(100, sizeof(Line));
-    screen.view_range_end = tb_height();
+    screen.y = 1;
+    screen.height = tb_height() / 2;
+    screen.x = 0;
+    screen.width = tb_width();
+    screen.view_range_end = screen.height;
     load_directory(path, &screen);
     for(;;)
     {
@@ -183,7 +216,7 @@ int main()
             {
                 clear_tb_buffer();
                 screen.view_range_start = 0;
-                screen.view_range_end = tb_height();
+                screen.view_range_end = screen.height;
             }
         }
         else if((u8)event.ch == 'k')
@@ -194,7 +227,7 @@ int main()
                 if(screen.num_lines > tb_height())
                 {
                     clear_tb_buffer();
-                    screen.view_range_start = screen.num_lines - tb_height();
+                    screen.view_range_start = screen.num_lines - screen.height;
                     screen.view_range_end = screen.num_lines;
                 }
             }
@@ -206,16 +239,16 @@ int main()
         }
         else if((u8)event.ch == 'h')
         {
-            pop_directory(cur_directory);
-            string_cstring(cur_directory, path, size);
+            pop_directory(global_current_directory);
+            string_cstring(global_current_directory, path, size);
             load_directory(path, &screen);
         }
         else if((u8)event.ch == 'l')
         {
             if(screen.buffer[screen.current_line].is_dir)
             {
-                push_directory(cur_directory, screen.buffer[screen.current_line].text);
-                string_cstring(cur_directory, path, size);
+                push_directory(global_current_directory, screen.buffer[screen.current_line].text);
+                string_cstring(global_current_directory, path, size);
                 load_directory(path, &screen);
             }
         }
@@ -231,7 +264,7 @@ int main()
             string_free(screen.buffer[i].text);
         }
     }
-    string_free(cur_directory);
+    string_free(global_current_directory);
     free(screen.buffer);
     tb_shutdown();
     return 0;
