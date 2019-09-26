@@ -119,15 +119,16 @@ void update_screen(Buffer *screen)
 int pop_directory(String *path)
 {
     i32 index = (i32)(path->length - 1);
+    char c;
 
-    for(;;)
+    while(index >= 0)
     {
-        char c = path->start[index];
+        c = path->start[index];
         index--;
         path->length--;
         if(c == '/') return 1;
-        if(index < 0) return 0;
     }
+    return 0;
 }
 
 void push_directory(String *path, String *dir)
@@ -179,13 +180,13 @@ void scroll(Buffer *screen, i32 lines)
 
 u32 negative_modulo(i32 max, i32 val)
 {
-    i32 result;
-    for(;;)
+    i32 result = val;
+    while(result < 0)
     {
         result = max + val;
-        if(result >= 0) return (u32)result;
         val = result;
     }
+    return (u32)result;
 }
 
 int main()
