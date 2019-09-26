@@ -73,14 +73,67 @@ void draw_query(String *query, u32 x, u32 y)
     tb_present();
 }
 
+u64 search_test(String *file, String *query)
+{
+    if(query->length > file->length) return 0;
+    if(query->length == 0) return 1;
+    u64 color_mask = 0;
+    u32 index = 0;
+    u32 num_matched = 0;
+    for(u32 i = 0; i < query->length; i++)
+    {
+        while(index < file->length)
+        {
+            i8 diff = query->start[i] - file->start[index];
+            if(diff == 0 || diff == -32 || diff == 32)
+            {
+                color_mask |= (1 << index);
+                if(++num_matched == query->length) return color_mask;
+                index++;
+                break;
+            }
+            index++;
+        }
+    }
+    return 0;
+}
+
 // Bubble sort for now, might change this later if it becomes a problem
 void sort_buffer(Buffer *screen)
 {
+    // Segregate directories and regular files
+    u32 dir_end = 0;
     u32 length = screen->num_lines;
-
-    for(u32 i = 0; i < length - 1; i++)
+    for(u32 index = 0; index < length; index++)
     {
-        for(u32 j = 0; j < length - 1 - i; j++)
+        if(screen->buffer[index].is_dir)
+        {
+            Line temp = screen->buffer[dir_end];
+            screen->buffer[dir_end] = screen->buffer[index];
+            screen->buffer[index] = temp;
+            dir_end++;
+        }
+    }
+    screen->files_start = dir_end;
+
+    // Sort directory portion
+    for(u32 i = 0; i < dir_end - 1; i++)
+    {
+        for(u32 j = 0; j < dir_end - 1 - i; j++)
+        {
+            if(!string_compare(screen->buffer[j].text, screen->buffer[j + 1].text))
+            {
+                Line temp = screen->buffer[j];
+                screen->buffer[j] = screen->buffer[j + 1];
+                screen->buffer[j + 1] = temp;
+            }
+        }
+    }
+
+    // Sort file portion
+    for(u32 i = dir_end; i < length - 1; i++)
+    {
+        for(u32 j = dir_end; j < length - 1 - i; j++)
         {
             if(!string_compare(screen->buffer[j].text, screen->buffer[j + 1].text))
             {
@@ -134,22 +187,25 @@ void update_search_screen(Buffer *screen, String *query)
     u32 buffer_width = screen->width, buffer_height = screen->height;
     struct tb_cell *tb_buffer = tb_cell_buffer();
     u32 end = screen->num_lines < screen->view_range_end ? screen->num_lines : screen->view_range_end;
-    static char c_query[128];
-    string_cstring(query, c_query, 128);
+    u32 next_y = buffer_y;
+
     for(u32 y = screen->view_range_start; y < end; y++)
     {
         Line line = screen->buffer[y];
         u32 end_x = line.text->length < buffer_width ? line.text->length : buffer_width;
-        //u64 color_mask = 0;
-        for(u32 x = 0; x < end_x; x++)
+        u64 color_mask = search_test(line.text, query);
+        if(color_mask)
         {
-            if(string_contains(line.text, c_query))
+            for(u32 x = 0; x < end_x; x++)
             {
-                u32 tb_index = x + buffer_x + tb_width() * (y - screen->view_range_start + buffer_y);
+                u32 tb_index = x + buffer_x + tb_width() * next_y;
                 tb_buffer[tb_index].ch = (u32)line.text->start[x];
-                tb_buffer[tb_index].fg = line.is_dir ? TB_RED : TB_WHITE;
-                tb_buffer[tb_index].bg = y == screen->current_line ? TB_BLUE : TB_BLACK;
+                u16 fg = line.is_dir ? TB_RED : TB_WHITE;
+                if((color_mask >> x) & 1) fg |= TB_BOLD;
+                tb_buffer[tb_index].fg = fg;
+                tb_buffer[tb_index].bg = next_y == buffer_y ? TB_BLUE : TB_BLACK;
             }
+            next_y++;
         }
     }
     tb_present();
@@ -337,12 +393,12 @@ int main()
                 }
                 else if(event.key == TB_KEY_BACKSPACE || event.key == TB_KEY_BACKSPACE2)
                 {
+                    clear_tb_buffer();
                     if(search_query)
                     {
-                        tb_change_cell(search_query->length - 1, screen.y + screen.height, (u32)' ', TB_BLACK, TB_BLACK);
                         string_pop(search_query);
-                        tb_present();
                     }
+                    draw_query(search_query, 0, screen.y + screen.height);
                     update_search_screen(&screen, search_query);
                 }
                 else if(event.key == TB_KEY_ESC)
