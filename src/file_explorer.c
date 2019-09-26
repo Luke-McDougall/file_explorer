@@ -1,6 +1,8 @@
+#define _GNU_SOURCE
 #include <unistd.h>
 #include <dirent.h>
-//#include <stdio.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 #include <stdlib.h>
 #include <string.h>
 #include "../include/termbox.h"
@@ -20,7 +22,7 @@ typedef enum
 typedef struct
 {
     String *text;
-    u8 type;
+    u8 is_dir;
 } Line;
 
 typedef struct 
@@ -47,9 +49,9 @@ void sort_buffer(Buffer *screen)
         {
             if(!string_compare(screen->buffer[j].text, screen->buffer[j + 1].text))
             {
-                String *temp = screen->buffer[j].text;
-                screen->buffer[j].text = screen->buffer[j + 1].text;
-                screen->buffer[j + 1].text = temp;
+                Line temp = screen->buffer[j];
+                screen->buffer[j] = screen->buffer[j + 1];
+                screen->buffer[j + 1] = temp;
             }
         }
     }
@@ -78,7 +80,7 @@ void update_screen(Buffer *screen)
         {
             u32 tb_index = x + tb_width() * (y - screen->view_range_start);
             tb_buffer[tb_index].ch = (u32)line.text->start[x];
-            tb_buffer[tb_index].fg = line.type == DT_DIR ? TB_RED : TB_WHITE;
+            tb_buffer[tb_index].fg = line.is_dir ? TB_RED : TB_WHITE;
             tb_buffer[tb_index].bg = y == screen->current_line ? TB_BLUE : TB_BLACK;
         }
     }
@@ -108,10 +110,6 @@ void push_directory(String *path, String *dir)
 void load_directory(char *path, Buffer *screen)
 {
     clear_tb_buffer();
-    //for(u32 i = 0; i < screen->num_lines; i++)
-    //{
-    //    string_free(screen->buffer[i].text);
-    //}
     struct dirent *dir;
     DIR *cwd = opendir(path);
     u32 index = 0;
@@ -127,7 +125,7 @@ void load_directory(char *path, Buffer *screen)
         {
             string_replace(screen->buffer[index].text, dir->d_name, strlen(dir->d_name));
         }
-        screen->buffer[index].type = dir->d_type;
+        screen->buffer[index].is_dir = dir->d_type == DT_DIR;
         index++;
         screen->num_lines++;
     }
