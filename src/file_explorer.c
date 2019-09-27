@@ -165,53 +165,6 @@ void exec_search(Buffer *screen, SearchBuffer *results, String *query)
     results->view_range_end = results->height;
 }
 
-// Bubble sort for now, might change this later if it becomes a problem
-void sort_buffer(Buffer *screen)
-{
-    // Segregate directories and regular files
-    u32 dir_end = 0;
-    u32 length = screen->num_lines;
-    for(u32 index = 0; index < length; index++)
-    {
-        if(screen->buffer[index].is_dir)
-        {
-            Line temp = screen->buffer[dir_end];
-            screen->buffer[dir_end] = screen->buffer[index];
-            screen->buffer[index] = temp;
-            dir_end++;
-        }
-    }
-    screen->files_start = dir_end;
-
-    // Sort directory portion
-    for(u32 i = 0; i < dir_end - 1; i++)
-    {
-        for(u32 j = 0; j < dir_end - 1 - i; j++)
-        {
-            if(!string_compare(screen->buffer[j].text, screen->buffer[j + 1].text))
-            {
-                Line temp = screen->buffer[j];
-                screen->buffer[j] = screen->buffer[j + 1];
-                screen->buffer[j + 1] = temp;
-            }
-        }
-    }
-
-    // Sort file portion
-    for(u32 i = dir_end; i < length - 1; i++)
-    {
-        for(u32 j = dir_end; j < length - 1 - i + dir_end; j++)
-        {
-            if(!string_compare(screen->buffer[j].text, screen->buffer[j + 1].text))
-            {
-                Line temp = screen->buffer[j];
-                screen->buffer[j] = screen->buffer[j + 1];
-                screen->buffer[j + 1] = temp;
-            }
-        }
-    }
-}
-
 void clear_tb_buffer()
 {
     struct tb_cell *tb_buffer = tb_cell_buffer();
@@ -331,11 +284,53 @@ void load_directory(char *path, Buffer *screen)
         index++;
         screen->num_lines++;
     }
+    closedir(cwd);
 
-    sort_buffer(screen);
     screen->view_range_end = screen->height;
     screen->view_range_start = 0;
-    closedir(cwd);
+
+    // Segregate directories and regular files
+    u32 dir_end = 0;
+    u32 length = screen->num_lines;
+    for(u32 index = 0; index < length; index++)
+    {
+        if(screen->buffer[index].is_dir)
+        {
+            Line temp = screen->buffer[dir_end];
+            screen->buffer[dir_end] = screen->buffer[index];
+            screen->buffer[index] = temp;
+            dir_end++;
+        }
+    }
+    screen->files_start = dir_end;
+
+    // Sort directory portion
+    for(u32 i = 0; i < dir_end - 1; i++)
+    {
+        for(u32 j = 0; j < dir_end - 1 - i; j++)
+        {
+            if(!string_compare(screen->buffer[j].text, screen->buffer[j + 1].text))
+            {
+                Line temp = screen->buffer[j];
+                screen->buffer[j] = screen->buffer[j + 1];
+                screen->buffer[j + 1] = temp;
+            }
+        }
+    }
+
+    // Sort file portion
+    for(u32 i = dir_end; i < length - 1; i++)
+    {
+        for(u32 j = dir_end; j < length - 1 - i + dir_end; j++)
+        {
+            if(!string_compare(screen->buffer[j].text, screen->buffer[j + 1].text))
+            {
+                Line temp = screen->buffer[j];
+                screen->buffer[j] = screen->buffer[j + 1];
+                screen->buffer[j + 1] = temp;
+            }
+        }
+    }
 }
 
 void scroll(Buffer *screen, i32 lines)
