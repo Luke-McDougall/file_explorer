@@ -26,6 +26,13 @@ typedef struct
     u8 is_dir;
 } Line;
 
+typedef struct
+{
+    String *text;
+    u8 is_dir;
+    u64 color_mask;
+} Result;
+
 typedef struct 
 {
     // x, y coordinates of the top left of the buffer
@@ -46,6 +53,29 @@ typedef struct
 
     Line *buffer;
 } Buffer;
+
+// NOTE(Luke): Remember this buffer should only contain strings also stored in the main buffer
+// so don't free them twice!
+typedef struct
+{
+    // x, y coordinates of the top left of the buffer
+    // plus width and height of the buffer.
+    u32 x;
+    u32 y;
+    u32 height;
+    u32 width;
+
+    i32 current_line;
+    u32 num_lines;
+    u32 view_range_start;
+    // All Lines before this index are directories
+    u32 files_start;
+    // view_range_end is one more than the last line with visible text
+    // should always be view_range_start + height
+    u32 view_range_end;
+
+    Result *buffer;
+} SearchBuffer;
 
 static String *global_current_directory;
 static Mode global_mode;
@@ -76,18 +106,23 @@ void draw_query(String *query, u32 x, u32 y)
 u64 search_test(String *file, String *query)
 {
     if(query->length > file->length) return 0;
-    if(query->length == 0) return 1;
     u64 color_mask = 0;
+    // This is to make sure the bit shifting doesn't produce fucked values
+    u64 one = 1;
     u32 index = 0;
     u32 num_matched = 0;
     for(u32 i = 0; i < query->length; i++)
     {
         while(index < file->length)
         {
-            i8 diff = query->start[i] - file->start[index];
-            if(diff == 0 || diff == -32 || diff == 32)
+            u8 c1 = query->start[i];
+            u8 c2 = file->start[index];
+            if(c1 >= 'A' && c1 <= 'Z') c1 += 32;
+            if(c2 >= 'A' && c2 <= 'Z') c2 += 32;
+            i8 diff = c1 - c2;
+            if(diff == 0)
             {
-                color_mask |= (1 << index);
+                color_mask |= (one << index);
                 if(++num_matched == query->length) return color_mask;
                 index++;
                 break;
@@ -96,6 +131,38 @@ u64 search_test(String *file, String *query)
         }
     }
     return 0;
+}
+
+void exec_search(Buffer *screen, SearchBuffer *results, String *query)
+{
+    if(query->length == 0)
+    {
+        results->num_lines = screen->num_lines;
+        for(u32 i = 0; i < screen->num_lines; i++)
+        {
+            results->buffer[i].text = screen->buffer[i].text;
+            results->buffer[i].is_dir = screen->buffer[i].is_dir;
+            results->buffer[i].color_mask = 0;
+        }
+    }
+    else
+    {
+        results->num_lines = 0;
+        for(u32 i = 0; i < screen->num_lines; i++)
+        {
+            u64 color_mask = search_test(screen->buffer[i].text, query);
+            if(color_mask)
+            {
+                u32 index = results->num_lines;
+                results->buffer[index].text = screen->buffer[i].text;
+                results->buffer[index].is_dir = screen->buffer[i].is_dir;
+                results->buffer[index].color_mask = color_mask;
+                results->num_lines++;
+            }
+        }
+    }
+    results->view_range_start = 0;
+    results->view_range_end = results->height;
 }
 
 // Bubble sort for now, might change this later if it becomes a problem
@@ -168,44 +235,54 @@ void update_screen(Buffer *screen)
     for(u32 y = screen->view_range_start; y < end; y++)
     {
         Line line = screen->buffer[y];
+        // TODO(Luke): Make this robust
+        if(line.is_dir)
+        {
+            u32 end_line = line.text->length + buffer_x + tb_width() * (y - screen->view_range_start + buffer_y);
+            tb_buffer[end_line].ch = (u32)'/';
+            tb_buffer[end_line].fg = TB_WHITE;
+            tb_buffer[end_line].bg = y == screen->current_line ? TB_BLUE : TB_BLACK;
+        }
         u32 end_x = line.text->length < buffer_width ? line.text->length : buffer_width;
         for(u32 x = 0; x < end_x; x++)
         {
             u32 tb_index = x + buffer_x + tb_width() * (y - screen->view_range_start + buffer_y);
             tb_buffer[tb_index].ch = (u32)line.text->start[x];
-            tb_buffer[tb_index].fg = line.is_dir ? TB_RED : TB_WHITE;
+            tb_buffer[tb_index].fg = TB_WHITE;
             tb_buffer[tb_index].bg = y == screen->current_line ? TB_BLUE : TB_BLACK;
         }
     }
     tb_present();
 }
 
-void update_search_screen(Buffer *screen, String *query)
+void update_search_screen(SearchBuffer *results)
 {
     draw_title();
-    u32 buffer_x = screen->x, buffer_y = screen->y; 
-    u32 buffer_width = screen->width, buffer_height = screen->height;
-    struct tb_cell *tb_buffer = tb_cell_buffer();
-    u32 end = screen->num_lines < screen->view_range_end ? screen->num_lines : screen->view_range_end;
-    u32 next_y = buffer_y;
+    u32 buffer_x = results->x, buffer_y = results->y; 
+    u32 buffer_width = results->width, buffer_height = results->height;
 
-    for(u32 y = screen->view_range_start; y < end; y++)
+    struct tb_cell *tb_buffer = tb_cell_buffer();
+    u32 end = results->num_lines < results->view_range_end ? results->num_lines : results->view_range_end;
+    for(u32 y = results->view_range_start; y < end; y++)
     {
-        Line line = screen->buffer[y];
-        u32 end_x = line.text->length < buffer_width ? line.text->length : buffer_width;
-        u64 color_mask = search_test(line.text, query);
-        if(color_mask)
+        Result line = results->buffer[y];
+        // TODO(Luke): Make this robust
+        if(line.is_dir)
         {
-            for(u32 x = 0; x < end_x; x++)
-            {
-                u32 tb_index = x + buffer_x + tb_width() * next_y;
-                tb_buffer[tb_index].ch = (u32)line.text->start[x];
-                u16 fg = line.is_dir ? TB_RED : TB_WHITE;
-                if((color_mask >> x) & 1) fg |= TB_BOLD;
-                tb_buffer[tb_index].fg = fg;
-                tb_buffer[tb_index].bg = next_y == buffer_y ? TB_BLUE : TB_BLACK;
-            }
-            next_y++;
+            u32 end_line = line.text->length + buffer_x + tb_width() * (y - results->view_range_start + buffer_y);
+            tb_buffer[end_line].ch = (u32)'/';
+            tb_buffer[end_line].fg = TB_WHITE;
+            tb_buffer[end_line].bg = y == results->current_line ? TB_BLUE : TB_BLACK;
+        }
+        u32 end_x = line.text->length < buffer_width ? line.text->length : buffer_width;
+        for(u32 x = 0; x < end_x; x++)
+        {
+            u32 tb_index = x + buffer_x + tb_width() * (y - results->view_range_start + buffer_y);
+            tb_buffer[tb_index].ch = (u32)line.text->start[x];
+            u16 fg = TB_WHITE;
+            if((line.color_mask >> x) & 1) fg = TB_RED;
+            tb_buffer[tb_index].fg = fg;
+            tb_buffer[tb_index].bg = y == results->current_line ? TB_BLUE : TB_BLACK;
         }
     }
     tb_present();
@@ -273,6 +350,13 @@ void scroll(Buffer *screen, i32 lines)
     }
 }
 
+void search_scroll(SearchBuffer *results)
+{
+    results->view_range_start++;
+    results->view_range_end++;
+    clear_tb_buffer();
+}
+
 u32 negative_modulo(i32 max, i32 val)
 {
     i32 result = val;
@@ -303,6 +387,15 @@ int main()
     screen.width = tb_width();
     screen.view_range_end = screen.height;
     load_directory(path, &screen);
+
+    SearchBuffer results = {};
+    results.buffer = (Result*)calloc(100, sizeof(Result));
+    results.y = 1;
+    results.height = tb_height() / 2;
+    results.x = 0;
+    results.width = tb_width();
+    results.view_range_end = results.height;
+
     update_screen(&screen);
     b32 running = true;
     while(running)
@@ -378,7 +471,8 @@ int main()
                     }
                     string_push(search_query, (u8)event.ch);
                     draw_query(search_query, 0, screen.y + screen.height);
-                    update_search_screen(&screen, search_query);
+                    exec_search(&screen, &results, search_query);
+                    update_search_screen(&results);
                 }
                 else if(event.key == TB_KEY_SPACE)
                 {
@@ -389,7 +483,8 @@ int main()
                     }
                     string_push(search_query, ' ');
                     draw_query(search_query, 0, screen.y + screen.height);
-                    update_search_screen(&screen, search_query);
+                    exec_search(&screen, &results, search_query);
+                    update_search_screen(&results);
                 }
                 else if(event.key == TB_KEY_BACKSPACE || event.key == TB_KEY_BACKSPACE2)
                 {
@@ -399,7 +494,26 @@ int main()
                         string_pop(search_query);
                     }
                     draw_query(search_query, 0, screen.y + screen.height);
-                    update_search_screen(&screen, search_query);
+                    exec_search(&screen, &results, search_query);
+                    update_search_screen(&results);
+                }
+                else if(event.key == TB_KEY_TAB)
+                {
+                    results.current_line = (results.current_line + 1) % results.num_lines;
+                    if(results.current_line >= results.view_range_end) 
+                    {
+                        // search_scroll calls clear_tb_buffer()
+                        search_scroll(&results);
+                        draw_query(search_query, 0, screen.y + screen.height);
+                    }
+                    else if(results.current_line < results.view_range_start)
+                    {
+                        results.view_range_start = results.current_line;
+                        results.view_range_end = results.current_line + results.height;
+                        clear_tb_buffer();
+                        draw_query(search_query, 0, screen.y + screen.height);
+                    }
+                    update_search_screen(&results);
                 }
                 else if(event.key == TB_KEY_ESC)
                 {
