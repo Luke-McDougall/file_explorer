@@ -96,6 +96,7 @@ void draw_title()
 
 void draw_query(String *query, u32 x, u32 y)
 {
+    if(query->length == 0) return;
     for(u32 i = 0; i < query->length; i++)
     {
         tb_change_cell(x + i, y, (u32)query->start[i], TB_WHITE, TB_BLACK);
@@ -173,6 +174,47 @@ void clear_tb_buffer()
     {
         tb_buffer[i].ch = (u32)' ';
         tb_buffer[i].bg = TB_BLACK;
+    }
+    tb_present();
+}
+
+void clear_buffer_area_normal(Buffer *screen)
+{
+    struct tb_cell *tb_buffer = tb_cell_buffer();
+
+    for(u32 y = screen->y; y < screen->y + screen->height; y++)
+    {
+        for(u32 x = screen->x; x < screen->x + screen->width; x++)
+        {
+            u32 tb_index = x + tb_width() * y;
+            tb_buffer[tb_index].ch = (u32)' ';
+            tb_buffer[tb_index].bg = TB_BLACK;
+        }
+    }
+    tb_present();
+}
+
+void clear_buffer_area_search(SearchBuffer *results, u32 query_length)
+{
+    struct tb_cell *tb_buffer = tb_cell_buffer();
+
+    // Clear query
+    for(u32 x = results->x; x < results->x + query_length; x++)
+    {
+        u32 tb_index = x + tb_width() * (results->y + results->height);
+        tb_buffer[tb_index].ch = (u32)' ';
+        tb_buffer[tb_index].bg = TB_BLACK;
+    }
+
+    // Clear rest of buffer
+    for(u32 y = results->y; y < results->y + results->height; y++)
+    {
+        for(u32 x = results->x; x < results->x + results->width; x++)
+        {
+            u32 tb_index = x + tb_width() * y;
+            tb_buffer[tb_index].ch = (u32)' ';
+            tb_buffer[tb_index].bg = TB_BLACK;
+        }
     }
     tb_present();
 }
@@ -349,7 +391,7 @@ void search_scroll(SearchBuffer *results)
 {
     results->view_range_start++;
     results->view_range_end++;
-    clear_tb_buffer();
+    clear_buffer_area_search(results, 0);
 }
 
 u32 negative_modulo(i32 max, i32 val)
@@ -459,7 +501,7 @@ int main()
             {
                 if((u8)event.ch >= 0x21 && (u8)event.ch <= 0x7E)
                 {
-                    clear_tb_buffer();
+                    clear_buffer_area_search(&results, 0);
                     if(!search_query)
                     {
                         search_query = string_new(20);
@@ -471,7 +513,7 @@ int main()
                 }
                 else if(event.key == TB_KEY_SPACE)
                 {
-                    clear_tb_buffer();
+                    clear_buffer_area_search(&results, 0);
                     if(!search_query)
                     {
                         search_query = string_new(20);
@@ -483,14 +525,14 @@ int main()
                 }
                 else if(event.key == TB_KEY_BACKSPACE || event.key == TB_KEY_BACKSPACE2)
                 {
-                    clear_tb_buffer();
-                    if(search_query)
+                    if(search_query && search_query->length > 0)
                     {
+                        clear_buffer_area_search(&results, search_query->length);
                         string_pop(search_query);
+                        draw_query(search_query, 0, screen.y + screen.height);
+                        exec_search(&screen, &results, search_query);
+                        update_search_screen(&results);
                     }
-                    draw_query(search_query, 0, screen.y + screen.height);
-                    exec_search(&screen, &results, search_query);
-                    update_search_screen(&results);
                 }
                 else if(event.key == TB_KEY_TAB)
                 {
@@ -499,14 +541,12 @@ int main()
                     {
                         // search_scroll calls clear_tb_buffer()
                         search_scroll(&results);
-                        draw_query(search_query, 0, screen.y + screen.height);
                     }
                     else if(results.current_line < results.view_range_start)
                     {
                         results.view_range_start = results.current_line;
                         results.view_range_end = results.current_line + results.height;
-                        clear_tb_buffer();
-                        draw_query(search_query, 0, screen.y + screen.height);
+                        clear_buffer_area_search(&results, 0);
                     }
                     update_search_screen(&results);
                 }
@@ -529,10 +569,15 @@ int main()
                 {
                     if(search_query && search_query->length > 0)
                     {
+                        clear_buffer_area_search(&results, search_query->length);
                         search_query->length = 0;
                     }
+                    else
+                    {
+                        clear_buffer_area_search(&results, 0);
+                    }
                     global_mode = NORMAL;
-                    clear_tb_buffer();
+                    //clear_tb_buffer();
                     update_screen(&screen);
                 }
             } break;
