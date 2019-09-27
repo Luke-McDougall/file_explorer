@@ -2,5 +2,5 @@
 
 pushd ../target
 gcc -c ../lib/strings.c
-gcc -g -o file_explorer ../src/file_explorer.c ../lib/libtermbox.a strings.o
+gcc -g -Wall -o file_explorer ../src/file_explorer.c ../lib/libtermbox.a strings.o
 popd
