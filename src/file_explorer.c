@@ -515,16 +515,26 @@ int main()
                     }
                     update_search_screen(&results);
                 }
+                else if(event.key == TB_KEY_ENTER)
+                {
+                    if(results.buffer[results.current_line].is_dir)
+                    {
+                        push_directory(global_current_directory, results.buffer[results.current_line].text);
+                        string_cstring(global_current_directory, path, size);
+                        load_directory(path, &screen);
+                        if(search_query && search_query->length > 0)
+                        {
+                            search_query->length = 0;
+                        }
+                        global_mode = NORMAL;
+                        update_screen(&screen);
+                    }
+                }
                 else if(event.key == TB_KEY_ESC)
                 {
-                    if(search_query)
+                    if(search_query && search_query->length > 0)
                     {
-                        while(search_query->length > 0)
-                        {
-                            tb_change_cell(search_query->length - 1, screen.y + screen.height, (u32)' ', TB_BLACK, TB_BLACK);
-                            search_query->length--;
-                        }
-                        tb_present();
+                        search_query->length = 0;
                     }
                     global_mode = NORMAL;
                     clear_tb_buffer();
