@@ -200,7 +200,7 @@ void sort_buffer(Buffer *screen)
     // Sort file portion
     for(u32 i = dir_end; i < length - 1; i++)
     {
-        for(u32 j = dir_end; j < length - 1 - i; j++)
+        for(u32 j = dir_end; j < length - 1 - i + dir_end; j++)
         {
             if(!string_compare(screen->buffer[j].text, screen->buffer[j + 1].text))
             {
