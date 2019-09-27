@@ -1,5 +1,8 @@
 #!/bin/zsh
 
+if [ ! -d "../target" ]; then
+    mkdir ../target
+fi
 pushd ../target
 gcc -c ../lib/strings.c
 gcc -g -Wall -o file_explorer ../src/file_explorer.c ../lib/libtermbox.a strings.o
