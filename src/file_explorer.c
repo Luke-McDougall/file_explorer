@@ -66,6 +66,10 @@ typedef struct
     u32 height;
     u32 width;
 
+    String *query;
+    u32 query_x;
+    u32 query_y;
+
     i32 current_line;
     u32 num_lines;
     u32 view_range_start;
@@ -101,16 +105,6 @@ void draw_title()
     for(u32 i = 0; i < global_current_directory->length; i++)
     {
         tb_change_cell(18 + i, 0, (u32)global_current_directory->start[i], TB_WHITE, TB_BLACK);
-    }
-    tb_present();
-}
-
-void draw_query(String *query, u32 x, u32 y)
-{
-    if(query->length == 0) return;
-    for(u32 i = 0; i < query->length; i++)
-    {
-        tb_change_cell(x + i, y, (u32)query->start[i], TB_WHITE, TB_BLACK);
     }
     tb_present();
 }
@@ -267,11 +261,24 @@ void update_screen(Buffer *screen)
 
 void update_search_screen(SearchBuffer *results)
 {
-    draw_title();
+    struct tb_cell *tb_buffer = tb_cell_buffer();
+    
     u32 buffer_x = results->x, buffer_y = results->y; 
     u32 buffer_width = results->width, buffer_height = results->height;
+    // Draw query bar
+    {
+        u32 x = results->query_x;
+        u32 y = results->query_y;
+        u32 length = results->query->length;
+        for(u32 i = 0; i < length; i++)
+        {
+            u32 tb_index = x + i + tb_width() * y;
+            tb_buffer[tb_index].ch = (u32)results->query->start[i];
+            tb_buffer[tb_index].fg = TB_WHITE;
+            tb_buffer[tb_index].bg = TB_BLACK;
+        }
+    }
 
-    struct tb_cell *tb_buffer = tb_cell_buffer();
     u32 end = results->num_lines < results->view_range_end ? results->num_lines : results->view_range_end;
     for(u32 y = results->view_range_start; y < end; y++)
     {
@@ -445,7 +452,6 @@ int main()
     size_t size = 256;
     getcwd(path, size);
     global_current_directory = string_from(path);
-    String *search_query = NULL;
 
     Buffer screen = {};
     screen.buffer = (Line*)calloc(100, sizeof(Line));
@@ -460,6 +466,8 @@ int main()
     results.buffer = (Result*)calloc(100, sizeof(Result));
     results.y = tb_height() / 2 + 2;
     results.height = tb_height() / 2 - 2;
+    results.query_x = 0;
+    results.query_y = results.y - 1;
     results.x = 0;
     results.width = tb_width();
     results.view_range_end = results.y + results.height;
@@ -543,35 +551,32 @@ int main()
                 if((u8)event.ch >= 0x21 && (u8)event.ch <= 0x7E)
                 {
                     clear_buffer_area_search(&results, 0);
-                    if(!search_query)
+                    if(!results.query)
                     {
-                        search_query = string_new(20);
+                        results.query = string_new(20);
                     }
-                    string_push(search_query, (u8)event.ch);
-                    draw_query(search_query, 0, results.y - 1);
-                    exec_search(&screen, &results, search_query);
+                    string_push(results.query, (u8)event.ch);
+                    exec_search(&screen, &results, results.query);
                     update_search_screen(&results);
                 }
                 else if(event.key == TB_KEY_SPACE)
                 {
                     clear_buffer_area_search(&results, 0);
-                    if(!search_query)
+                    if(!results.query)
                     {
-                        search_query = string_new(20);
+                        results.query = string_new(20);
                     }
-                    string_push(search_query, ' ');
-                    draw_query(search_query, 0, results.y - 1);
-                    exec_search(&screen, &results, search_query);
+                    string_push(results.query, ' ');
+                    exec_search(&screen, &results, results.query);
                     update_search_screen(&results);
                 }
                 else if(event.key == TB_KEY_BACKSPACE || event.key == TB_KEY_BACKSPACE2)
                 {
-                    if(search_query && search_query->length > 0)
+                    if(results.query && results.query->length > 0)
                     {
-                        clear_buffer_area_search(&results, search_query->length);
-                        string_pop(search_query);
-                        draw_query(search_query, 0, results.y - 1);
-                        exec_search(&screen, &results, search_query);
+                        clear_buffer_area_search(&results, results.query->length);
+                        string_pop(results.query);
+                        exec_search(&screen, &results, results.query);
                         update_search_screen(&results);
                     }
                 }
@@ -593,10 +598,10 @@ int main()
                 }
                 else if(event.key == TB_KEY_ENTER)
                 {
-                    if(search_query && search_query->length > 0)
+                    if(results.query && results.query->length > 0)
                     {
-                        clear_buffer_area_search(&results, search_query->length);
-                        search_query->length = 0;
+                        clear_buffer_area_search(&results, results.query->length);
+                        results.query->length = 0;
                     }
                     else
                     {
@@ -608,10 +613,10 @@ int main()
                 }
                 else if(event.key == TB_KEY_ESC)
                 {
-                    if(search_query && search_query->length > 0)
+                    if(results.query && results.query->length > 0)
                     {
-                        clear_buffer_area_search(&results, search_query->length);
-                        search_query->length = 0;
+                        clear_buffer_area_search(&results, results.query->length);
+                        results.query->length = 0;
                     }
                     else
                     {
