@@ -298,8 +298,6 @@ void update_search_screen(SearchBuffer *results)
 {
     struct tb_cell *tb_buffer = tb_cell_buffer();
     
-    u32 buffer_x = results->x, buffer_y = results->y; 
-    u32 buffer_width = results->width, buffer_height = results->height;
     // Draw query bar
     {
         u32 x = results->query_x;
@@ -314,30 +312,63 @@ void update_search_screen(SearchBuffer *results)
         }
     }
 
-    u32 end = results->num_lines < results->view_range_end ? results->num_lines : results->view_range_end;
+    u32 end;
+    if(results->num_lines < results->view_range_end) 
+    {
+        end = results->num_lines;
+    }
+    else
+    {
+        end = results->view_range_end;
+    }
+
     for(u32 y = results->view_range_start; y < end; y++)
     {
         Result line = results->buffer[y];
         // TODO(Luke): Make this robust
         if(line.is_dir)
         {
-            u32 end_line = line.text->length + buffer_x + tb_width() * (y - results->view_range_start + buffer_y);
+            u32 end_line = line.text->length + results->x + tb_width() * (y - results->view_range_start + results->y);
             tb_buffer[end_line].ch = (u32)'/';
             tb_buffer[end_line].fg = TB_WHITE;
             tb_buffer[end_line].bg = y == results->current_line ? TB_BLUE : TB_BLACK;
         }
-        u32 end_x = line.text->length < buffer_width ? line.text->length : buffer_width;
-        for(u32 x = 0; x < end_x; x++)
+
+        u16 bg = y == results->current_line ? TB_MAGENTA : TB_WHITE;
+        for(u32 x = 0; x < line.text->length; x++)
         {
-            u32 tb_index = x + buffer_x + tb_width() * (y - results->view_range_start + buffer_y);
+            u32 tb_index = x + results->x + tb_width() * (y - results->view_range_start + results->y);
             tb_buffer[tb_index].ch = (u32)line.text->start[x];
-            u16 fg = y == results->current_line ? TB_WHITE : TB_BLACK ;
+            u16 fg = y == results->current_line ? TB_WHITE : TB_BLACK;
             if((line.color_mask >> x) & 1) fg |= TB_BOLD;
             tb_buffer[tb_index].fg = fg;
-            tb_buffer[tb_index].bg = y == results->current_line ? TB_BLACK : TB_WHITE;
+            tb_buffer[tb_index].bg = bg;
+        }
+        for(u32 x = line.text->length; x < results->width; x++)
+        {
+            u32 tb_index = x + results->x + tb_width() * (y - results->view_range_start + results->y);
+            tb_buffer[tb_index].ch = (u32)' ';
+            tb_buffer[tb_index].bg = bg;
         }
     }
     tb_present();
+}
+
+void draw_search_overlay(Buffer *screen, SearchBuffer *results)
+{
+    clear_normal_buffer_area(screen);
+    u32 original_view_end = screen->view_range_end;
+    if(screen->num_lines < screen->height - 1 - results->height)
+    {
+        update_screen(screen);
+    }
+    else
+    {
+        screen->view_range_end  = screen->view_range_start + (screen->height - results->height);
+        update_screen(screen);
+        screen->view_range_end = original_view_end;
+    }
+    update_search_screen(results);
 }
 
 int pop_directory(String *path)
@@ -499,13 +530,10 @@ int main()
 
     SearchBuffer results = {};
     results.buffer = (Result*)calloc(100, sizeof(Result));
-    results.y = tb_height() / 2 + 2;
-    results.height = tb_height() / 2 - 2;
     results.query_x = 2;
-    results.query_y = results.y - 1;
+    results.query_y = tb_height() / 2;
     results.x = 2;
-    results.width = tb_width() / 2;
-    results.view_range_end = results.y + results.height;
+    results.width = tb_width() / 4;
 
     background(TB_BLACK);
     update_screen(&screen);
@@ -571,7 +599,7 @@ int main()
                 {
                     global_mode = SEARCH;
                 }
-                else
+                else if((u8)event.ch == 'q')
                 {
                     running = false;
                 }
@@ -590,7 +618,8 @@ int main()
                     }
                     string_push(results.query, (u8)event.ch);
                     exec_search(&screen, &results, results.query);
-                    update_search_screen(&results);
+                    //update_search_screen(&results);
+                    draw_search_overlay(&screen, &results);
                 }
                 else if(event.key == TB_KEY_SPACE)
                 {
@@ -601,7 +630,8 @@ int main()
                     }
                     string_push(results.query, ' ');
                     exec_search(&screen, &results, results.query);
-                    update_search_screen(&results);
+                    //update_search_screen(&results);
+                    draw_search_overlay(&screen, &results);
                 }
                 else if(event.key == TB_KEY_BACKSPACE || event.key == TB_KEY_BACKSPACE2)
                 {
@@ -610,7 +640,8 @@ int main()
                         clear_search_buffer_area(&results, results.query->length);
                         string_pop(results.query);
                         exec_search(&screen, &results, results.query);
-                        update_search_screen(&results);
+                        //update_search_screen(&results);
+                        draw_search_overlay(&screen, &results);
                     }
                 }
                 else if(event.key == TB_KEY_TAB)
@@ -627,7 +658,8 @@ int main()
                         results.view_range_end = results.current_line + results.height;
                         clear_search_buffer_area(&results, 0);
                     }
-                    update_search_screen(&results);
+                    //update_search_screen(&results);
+                    draw_search_overlay(&screen, &results);
                 }
                 else if(event.key == TB_KEY_ENTER)
                 {
