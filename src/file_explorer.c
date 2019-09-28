@@ -11,6 +11,16 @@
 #include "../include/types.h"
 
 
+// TODO(Luke):
+// 1. Add more basic file operations. Copy, delete, move etc
+// 2. Add vertical/horizontal splits. I'll need some mechanism to manage multiple buffers
+// 3. Finish insert mode and implement visual mode.
+// 4. For visual mode implement a way to highlight multiple lines
+// 5. Deal with resize event eventually
+// 6. General robustness/error handling stuff that will be very tedious
+
+
+
 typedef enum
 {
     INSERT,
@@ -50,7 +60,7 @@ typedef struct
     // All Lines before this index are directories
     u32 files_start;
     // view_range_end is one more than the last line with visible text
-    // should always be view_range_start + height
+    // should always be view_range_start + height - 1 because first row is for the title
     u32 view_range_end;
 
     Line *buffer;
@@ -74,8 +84,6 @@ typedef struct
     i32 current_line;
     u32 num_lines;
     u32 view_range_start;
-    // All Lines before this index are directories
-    u32 files_start;
     // view_range_end is one more than the last line with visible text
     // should always be view_range_start + height
     u32 view_range_end;
@@ -282,7 +290,7 @@ void update_screen(Buffer *screen)
             tb_buffer[tb_index].bg = y == screen->current_line ? TB_BLUE : TB_BLACK;
         }
     }
-    // Experimental ui thing
+
     for(u32 i = 0; i < tb_width(); i++)
     {
         u32 index = i + tb_width() * (screen->y + screen->height - 1);
@@ -495,17 +503,6 @@ void search_scroll(SearchBuffer *results)
     results->view_range_start++;
     results->view_range_end++;
     clear_search_buffer_area(results, 0);
-}
-
-u32 negative_modulo(i32 max, i32 val)
-{
-    i32 result = val;
-    while(result < 0)
-    {
-        result = max + val;
-        val = result;
-    }
-    return (u32)result;
 }
 
 void draw_text(String *text, u32 x, u32 y)
