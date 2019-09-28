@@ -3,6 +3,7 @@
 #include <dirent.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
 #include "../include/termbox.h"
@@ -509,6 +510,24 @@ u32 negative_modulo(i32 max, i32 val)
     return (u32)result;
 }
 
+void draw_text(String *text, u32 x, u32 y)
+{
+    for(u32 i = 0; i < text->length; i++)
+    {
+        tb_change_cell(x + i, y, (u32)text->start[i], TB_WHITE, TB_BLACK);
+    }
+    tb_present();
+}
+
+void clear_text(u32 x, u32 y, u32 length)
+{
+    for(u32 i = 0; i < length; i++)
+    {
+        tb_change_cell(x + i, y, (u32)' ', TB_WHITE, TB_BLACK);
+    }
+    tb_present();
+}
+
 int main()
 {
     tb_init();
@@ -534,6 +553,9 @@ int main()
     results.query_y = tb_height() / 2;
     results.x = 2;
     results.width = tb_width() / 4;
+
+    // Name of new file created. Might move this somewhere else some time
+    String *new_file_name = NULL;
 
     background(TB_BLACK);
     update_screen(&screen);
@@ -598,6 +620,10 @@ int main()
                 else if((u8)event.ch == 's')
                 {
                     global_mode = SEARCH;
+                }
+                else if((u8)event.ch == 'i')
+                {
+                    global_mode = INSERT;
                 }
                 else if((u8)event.ch == 'q')
                 {
@@ -689,6 +715,50 @@ int main()
                     }
                     global_mode = NORMAL;
                     update_screen(&screen);
+                }
+            } break;
+
+            case INSERT:
+            {
+                if((u8)event.ch >= 0x21 && (u8)event.ch <= 0x7E)
+                {
+                    if(!new_file_name)
+                    {
+                        new_file_name = string_new(20);
+                    }
+                    string_push(new_file_name, (u8)event.ch);
+                    draw_text(new_file_name, results.query_x, results.query_y);
+                }
+                else if(event.key == TB_KEY_BACKSPACE || event.key == TB_KEY_BACKSPACE2)
+                {
+                    new_file_name->length--;
+                    tb_change_cell(results.query_x + new_file_name->length, results.query_y, (u32)' ', TB_BLACK, TB_BLACK);
+                    tb_present();
+                }
+                else if(event.key == TB_KEY_ENTER)
+                {
+                    if(new_file_name && new_file_name->length > 0)
+                    {
+                        push_directory(screen.current_directory, new_file_name);
+                        string_cstring(screen.current_directory, path, size);
+                        pop_directory(screen.current_directory);
+                        close(creat(path, O_CLOEXEC));
+                        clear_text(results.query_x, results.query_y, new_file_name->length);
+                        new_file_name->length = 0;
+                        string_cstring(screen.current_directory, path, size);
+                        load_directory(path, &screen);
+                        update_screen(&screen);
+                    }
+                    global_mode = NORMAL;
+                }
+                else if(event.key == TB_KEY_ESC)
+                {
+                    if(new_file_name)
+                    {
+                        clear_text(results.query_x, results.query_y, new_file_name->length);
+                        new_file_name->length = 0;
+                    }
+                    global_mode = NORMAL;
                 }
             } break;
         }
