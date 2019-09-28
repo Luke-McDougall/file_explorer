@@ -176,6 +176,7 @@ void exec_search(Buffer *screen, SearchBuffer *results, String *query)
         }
     }
     results->view_range_start = 0;
+    results->current_line = 0;
     results->view_range_end = results->height;
 }
 
@@ -207,6 +208,7 @@ void clear_buffer_area_normal(Buffer *screen)
     tb_present();
 }
 
+// Pass zero for query_length to not clear the query
 void clear_buffer_area_search(SearchBuffer *results, u32 query_length)
 {
     struct tb_cell *tb_buffer = tb_cell_buffer();
@@ -537,6 +539,7 @@ int main()
 
             case SEARCH:
             {
+                // 0x21 - 0x7E is the range of valid ascii character codes that can be added to the query
                 if((u8)event.ch >= 0x21 && (u8)event.ch <= 0x7E)
                 {
                     clear_buffer_area_search(&results, 0);
@@ -615,7 +618,6 @@ int main()
                         clear_buffer_area_search(&results, 0);
                     }
                     global_mode = NORMAL;
-                    //clear_tb_buffer();
                     update_screen(&screen);
                 }
             } break;
