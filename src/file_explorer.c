@@ -186,7 +186,7 @@ void background(u16 bg)
     tb_present();
 }
 
-void clear_buffer_area_normal(Buffer *screen)
+void clear_normal_buffer_area(Buffer *screen)
 {
     struct tb_cell *tb_buffer = tb_cell_buffer();
 
@@ -203,7 +203,7 @@ void clear_buffer_area_normal(Buffer *screen)
 }
 
 // Pass zero for query_length to not clear the query
-void clear_buffer_area_search(SearchBuffer *results, u32 query_length)
+void clear_search_buffer_area(SearchBuffer *results, u32 query_length)
 {
     struct tb_cell *tb_buffer = tb_cell_buffer();
 
@@ -328,7 +328,7 @@ void push_directory(String *path, String *dir)
 
 void load_directory(char *path, Buffer *screen)
 {
-    clear_buffer_area_normal(screen);
+    clear_normal_buffer_area(screen);
     struct dirent *dir;
     DIR *cwd = opendir(path);
     u32 index = 0;
@@ -405,7 +405,7 @@ void scroll(Buffer *screen, i32 lines)
     {
         screen->view_range_start = (u32)new_start;
         screen->view_range_end = (u32)new_end;
-        clear_buffer_area_normal(screen);
+        clear_normal_buffer_area(screen);
     }
 }
 
@@ -429,7 +429,7 @@ void search_scroll(SearchBuffer *results)
 {
     results->view_range_start++;
     results->view_range_end++;
-    clear_buffer_area_search(results, 0);
+    clear_search_buffer_area(results, 0);
 }
 
 u32 negative_modulo(i32 max, i32 val)
@@ -488,7 +488,7 @@ int main()
                     if(screen.current_line >= screen.view_range_end) scroll(&screen, SCROLL_SPEED);
                     if(screen.current_line == 0) 
                     {
-                        clear_buffer_area_normal(&screen);
+                        clear_normal_buffer_area(&screen);
                         screen.view_range_start = 0;
                         screen.view_range_end = screen.height;
                     }
@@ -500,7 +500,7 @@ int main()
                         screen.current_line = negative_modulo(screen.current_line, (i32)screen.num_lines - 1);
                         if(screen.num_lines > tb_height())
                         {
-                            clear_buffer_area_normal(&screen);
+                            clear_normal_buffer_area(&screen);
                             screen.view_range_start = screen.num_lines - screen.height;
                             screen.view_range_end = screen.num_lines;
                         }
@@ -550,7 +550,7 @@ int main()
                 // 0x21 - 0x7E is the range of valid ascii character codes that can be added to the query
                 if((u8)event.ch >= 0x21 && (u8)event.ch <= 0x7E)
                 {
-                    clear_buffer_area_search(&results, 0);
+                    clear_search_buffer_area(&results, 0);
                     if(!results.query)
                     {
                         results.query = string_new(20);
@@ -561,7 +561,7 @@ int main()
                 }
                 else if(event.key == TB_KEY_SPACE)
                 {
-                    clear_buffer_area_search(&results, 0);
+                    clear_search_buffer_area(&results, 0);
                     if(!results.query)
                     {
                         results.query = string_new(20);
@@ -574,7 +574,7 @@ int main()
                 {
                     if(results.query && results.query->length > 0)
                     {
-                        clear_buffer_area_search(&results, results.query->length);
+                        clear_search_buffer_area(&results, results.query->length);
                         string_pop(results.query);
                         exec_search(&screen, &results, results.query);
                         update_search_screen(&results);
@@ -585,14 +585,14 @@ int main()
                     results.current_line = (results.current_line + 1) % results.num_lines;
                     if(results.current_line >= results.view_range_end) 
                     {
-                        // search_scroll calls clear_buffer_area_search()
+                        // search_scroll calls clear_search_buffer_area()
                         search_scroll(&results);
                     }
                     else if(results.current_line < results.view_range_start)
                     {
                         results.view_range_start = results.current_line;
                         results.view_range_end = results.current_line + results.height;
-                        clear_buffer_area_search(&results, 0);
+                        clear_search_buffer_area(&results, 0);
                     }
                     update_search_screen(&results);
                 }
@@ -600,12 +600,12 @@ int main()
                 {
                     if(results.query && results.query->length > 0)
                     {
-                        clear_buffer_area_search(&results, results.query->length);
+                        clear_search_buffer_area(&results, results.query->length);
                         results.query->length = 0;
                     }
                     else
                     {
-                        clear_buffer_area_search(&results, 0);
+                        clear_search_buffer_area(&results, 0);
                     }
                     jump_to_line(&screen, results.buffer[results.current_line].original_line_number);
                     global_mode = NORMAL;
@@ -615,12 +615,12 @@ int main()
                 {
                     if(results.query && results.query->length > 0)
                     {
-                        clear_buffer_area_search(&results, results.query->length);
+                        clear_search_buffer_area(&results, results.query->length);
                         results.query->length = 0;
                     }
                     else
                     {
-                        clear_buffer_area_search(&results, 0);
+                        clear_search_buffer_area(&results, 0);
                     }
                     global_mode = NORMAL;
                     update_screen(&screen);
