@@ -10,8 +10,6 @@
 #include "../include/strings.h"
 #include "../include/types.h"
 
-#define SCROLL_SPEED 1
-
 
 typedef enum
 {
@@ -46,7 +44,7 @@ typedef struct
     u32 height;
     u32 width;
 
-    i32 current_line;
+    u32 current_line;
     u32 num_lines;
     u32 view_range_start;
     // All Lines before this index are directories
@@ -570,7 +568,7 @@ int main()
                 if((u8)event.ch == 'j')
                 {
                     screen.current_line = (screen.current_line + 1) % screen.num_lines;
-                    if(screen.current_line >= screen.view_range_end) scroll(&screen, SCROLL_SPEED);
+                    if(screen.current_line >= screen.view_range_end) scroll(&screen, 1);
                     if(screen.current_line == 0) 
                     {
                         clear_normal_buffer_area(&screen);
@@ -579,20 +577,19 @@ int main()
                 }
                 else if((u8)event.ch == 'k')
                 {
-                    if(screen.current_line <= 0)
+                    if(screen.current_line == 0)
                     {
-                        screen.current_line = negative_modulo(screen.current_line, (i32)screen.num_lines - 1);
-                        if(screen.num_lines > tb_height())
+                        if(screen.num_lines > screen.view_range_end)
                         {
                             clear_normal_buffer_area(&screen);
-                            jump_to_line(&screen, screen.num_lines - 1);
                         }
+                        jump_to_line(&screen, screen.num_lines - 1);
                     }
                     else
                     {
                         screen.current_line--;
                     }
-                    if(screen.current_line < screen.view_range_start) scroll(&screen, -SCROLL_SPEED);
+                    if(screen.current_line < screen.view_range_start) scroll(&screen, -1);
                 }
                 else if((u8)event.ch == 'h')
                 {
@@ -644,7 +641,6 @@ int main()
                     }
                     string_push(results.query, (u8)event.ch);
                     exec_search(&screen, &results, results.query);
-                    //update_search_screen(&results);
                     draw_search_overlay(&screen, &results);
                 }
                 else if(event.key == TB_KEY_SPACE)
@@ -656,7 +652,6 @@ int main()
                     }
                     string_push(results.query, ' ');
                     exec_search(&screen, &results, results.query);
-                    //update_search_screen(&results);
                     draw_search_overlay(&screen, &results);
                 }
                 else if(event.key == TB_KEY_BACKSPACE || event.key == TB_KEY_BACKSPACE2)
@@ -666,7 +661,6 @@ int main()
                         clear_search_buffer_area(&results, results.query->length);
                         string_pop(results.query);
                         exec_search(&screen, &results, results.query);
-                        //update_search_screen(&results);
                         draw_search_overlay(&screen, &results);
                     }
                 }
@@ -684,7 +678,6 @@ int main()
                         results.view_range_end = results.current_line + results.height;
                         clear_search_buffer_area(&results, 0);
                     }
-                    //update_search_screen(&results);
                     draw_search_overlay(&screen, &results);
                 }
                 else if(event.key == TB_KEY_ENTER)
