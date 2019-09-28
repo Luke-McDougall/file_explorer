@@ -725,6 +725,15 @@ int main()
                     tb_change_cell(results.query_x + new_file_name->length, results.query_y, (u32)' ', TB_BLACK, TB_BLACK);
                     tb_present();
                 }
+                else if(event.key == TB_KEY_SPACE)
+                {
+                    if(!new_file_name)
+                    {
+                        new_file_name = string_new(20);
+                    }
+                    string_push(new_file_name, ' ');
+                    draw_text(new_file_name, results.query_x, results.query_y);
+                }
                 else if(event.key == TB_KEY_ENTER)
                 {
                     if(new_file_name && new_file_name->length > 0)
