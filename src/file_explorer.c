@@ -169,8 +169,19 @@ void exec_search(Buffer *screen, SearchBuffer *results, String *query)
             }
         }
     }
+    u32 max_height = screen->height / 4;
     results->view_range_start = 0;
     results->current_line = 0;
+    if(results->num_lines > max_height)
+    {
+        results->height = max_height;
+        results->y = screen->y + screen->height - max_height;
+    }
+    else
+    {
+        results->height = results->num_lines;
+        results->y = screen->y + screen->height - results->num_lines;
+    }
     results->view_range_end = results->height;
 }
 
@@ -208,9 +219,9 @@ void clear_search_buffer_area(SearchBuffer *results, u32 query_length)
     struct tb_cell *tb_buffer = tb_cell_buffer();
 
     // Clear query
-    for(u32 x = results->x; x < results->x + query_length; x++)
+    for(u32 x = results->query_x; x < results->query_x + query_length; x++)
     {
-        u32 tb_index = x + tb_width() * (results->y - 1);
+        u32 tb_index = x + tb_width() * (results->query_y);
         tb_buffer[tb_index].ch = (u32)' ';
         tb_buffer[tb_index].bg = TB_BLACK;
     }
@@ -256,6 +267,13 @@ void update_screen(Buffer *screen)
             tb_buffer[tb_index].bg = y == screen->current_line ? TB_BLUE : TB_BLACK;
         }
     }
+    // Experimental ui thing
+    for(u32 i = 0; i < tb_width(); i++)
+    {
+        u32 index = i + tb_width() * (screen->y + screen->height - 1);
+        tb_buffer[index].fg = TB_WHITE | TB_UNDERLINE;
+    }
+
     tb_present();
 }
 
@@ -297,9 +315,9 @@ void update_search_screen(SearchBuffer *results)
             u32 tb_index = x + buffer_x + tb_width() * (y - results->view_range_start + buffer_y);
             tb_buffer[tb_index].ch = (u32)line.text->start[x];
             u16 fg = TB_WHITE;
-            if((line.color_mask >> x) & 1) fg = TB_RED;
+            if((line.color_mask >> x) & 1) fg = TB_BLACK | TB_BOLD;
             tb_buffer[tb_index].fg = fg;
-            tb_buffer[tb_index].bg = y == results->current_line ? TB_BLUE : TB_BLACK;
+            tb_buffer[tb_index].bg = y == results->current_line ? TB_BLUE : TB_MAGENTA;
         }
     }
     tb_present();

@@ -206,6 +206,36 @@ string_pop(String *str)
 }
 
 void
+string_push_str(String *str, char *cstr, size_t length)
+{
+    if(str->length + length <= str->capacity)
+    {
+        for(u32 i = 0; i < length; i++)
+        {
+            str->start[str->length++] = cstr[i];
+        }
+    }
+    else 
+    {
+        u32 new_length = str->length + length;
+        char *new_str = (char*)malloc(sizeof(char) * new_length * 2);
+        u32 index = 0;
+        for(u32 i = 0; i < str->length; i++)
+        {
+            new_str[index++] = str->start[i];
+        }
+        for(u32 i = 0; i < length; i++)
+        {
+            new_str[index++] = cstr[i];
+        }
+        str->length = new_length;
+        str->capacity = new_length * 2;
+        free(str->start);
+        str->start = new_str;
+    }
+}
+
+void
 string_free(String *str)
 {
     free(str->start);

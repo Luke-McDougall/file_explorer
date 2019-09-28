@@ -16,5 +16,6 @@ b32 string_compare(String*, String*);
 void string_cstring(String*, char*, size_t);
 void string_replace(String*, char*, size_t);
 void string_push(String*, char);
+void string_push_str(String*, char*, size_t);
 void string_pop(String*);
 void string_free(String*);
