@@ -91,6 +91,12 @@ typedef struct
     Result *buffer;
 } SearchBuffer;
 
+#define MAX_BUFFERS 4
+
+static u32 global_state_active_buffer;
+static u32 global_state_num_buffers;
+static Buffer **global_state_buffers;
+
 static Mode global_mode;
 static char global_path[256];
 static size_t global_path_size = 256;
@@ -165,9 +171,14 @@ void exec_search(Buffer *screen, SearchBuffer *results, String *query)
             }
         }
     }
+
     u32 max_height = screen->height / 4;
     results->view_range_start = 0;
     results->current_line = 0;
+    results->query_x = screen->x;
+    results->query_y = screen->y + screen->height;
+    results->x = screen->x;
+    results->width = screen->width / 2;
     if(results->num_lines > max_height)
     {
         results->height = max_height;
@@ -319,7 +330,6 @@ void update_screen(Buffer *screen)
     }
 
     tb_present();
-    draw_vertical_line(0, tb_height(), screen->x + screen->width);
 }
 
 void update_search_screen(SearchBuffer *results)
@@ -497,7 +507,10 @@ void init_buffer(Buffer *buf, u32 x, u32 y, u32 width, u32 height, String *direc
     buf->y = y;
     buf->width = width;
     buf->height = height;
-    buf->current_directory = directory;
+    buf->view_range_start = 0;
+    buf->view_range_end = height - 1;
+    buf->current_line = 0;
+    buf->current_directory = string_copy(directory);
     buf->buffer = (Line*)calloc(100, sizeof(Line));
     
     // Load buffers current directory
@@ -558,6 +571,28 @@ void clear_text(u32 x, u32 y, u32 length)
     tb_present();
 }
 
+void vertical_split(Buffer *buffer)
+{
+    if(global_state_num_buffers < MAX_BUFFERS)
+    {
+        u32 buffer_width = buffer->width / 2;
+        u32 buffer_height = buffer->height;
+        u32 x_off = buffer->x;
+        u32 y_off = buffer->y;
+
+        buffer->width = buffer_width;
+
+        Buffer *buffer2 = (Buffer*)malloc(sizeof(Buffer));
+
+        init_buffer(buffer2, x_off * 2 + buffer_width, y_off, buffer_width, buffer_height, buffer->current_directory);
+        global_state_buffers[global_state_num_buffers++] = buffer2;
+
+        update_screen(buffer);
+        update_screen(buffer2);
+        draw_vertical_line(0, tb_height(), buffer->x + buffer->width);
+    }
+}
+
 int main()
 {
     tb_init();
@@ -565,28 +600,30 @@ int main()
     struct tb_event event = {};
     getcwd(global_path, global_path_size);
 
-    Buffer screen = {};
-    screen.current_directory = string_from(global_path);
-    screen.buffer = (Line*)calloc(100, sizeof(Line));
-    screen.y = 0;
-    screen.height = tb_height() / 2;
-    screen.x = 2;
-    screen.width = tb_width() / 2;
-    screen.view_range_end = screen.height - 1;
-    load_directory(global_path, &screen);
+    Buffer *buf = (Buffer*)malloc(sizeof(Buffer));
+    buf->current_directory = string_from(global_path);
+    buf->buffer = (Line*)calloc(100, sizeof(Line));
+    buf->y = 0;
+    buf->height = tb_height() - 1;
+    buf->x = 2;
+    buf->width = tb_width() - 10;
+    buf->view_range_end = buf->height - 1;
+    load_directory(global_path, buf);
+
+    global_state_num_buffers = 1;
+    global_state_active_buffer = 0;
+    global_state_buffers = (Buffer**)malloc(sizeof(Buffer*) * MAX_BUFFERS);
+    global_state_buffers[0] = buf;
 
     SearchBuffer results = {};
     results.buffer = (Result*)calloc(100, sizeof(Result));
-    results.query_x = 2;
-    results.query_y = tb_height() / 2;
-    results.x = 2;
-    results.width = tb_width() / 4;
 
     // Name of new file created. Might move this somewhere else some time
     String *new_file_name = NULL;
 
     background(TB_BLACK);
-    update_screen(&screen);
+    update_screen(buf);
+    Buffer screen = *global_state_buffers[0];
     b32 running = true;
     while(running)
     {
@@ -651,6 +688,15 @@ int main()
                 else if((u8)event.ch == 'i')
                 {
                     global_mode = INSERT;
+                }
+                else if((u8)event.ch == 'v')
+                {
+                    vertical_split(&screen);
+                }
+                else if((u8)event.ch == 'w')
+                {
+                    global_state_active_buffer = (global_state_active_buffer + 1) % global_state_num_buffers;
+                    screen = *(global_state_buffers[global_state_active_buffer]);
                 }
                 else if((u8)event.ch == 'D')
                 {
