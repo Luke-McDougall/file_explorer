@@ -601,6 +601,17 @@ void vertical_split(Buffer *buffer)
     }
 }
 
+// TODO(Luke): This, like all file IO, needs to handle errors at some point buddy boy
+void copy_file(char *src_file, char *dst_file)
+{
+    struct stat statbuf;
+    stat(src_file, &statbuf);
+    size_t length = statbuf.st_size;
+    int fd_in = open(src_file, O_RDONLY);
+    int fd_out = open(dst_file, O_CREAT|O_EXCL, S_IRUSR + S_IWUSR);
+    ssize_t result = copy_file_range(fd_in, NULL, fd_out, NULL, length, 0);
+}
+
 int main()
 {
     tb_init();
@@ -818,12 +829,12 @@ int main()
                         new_file_name = string_new(20);
                     }
                     string_push(new_file_name, (u8)event.ch);
-                    draw_text(new_file_name, results.query_x, results.query_y);
+                    draw_text(new_file_name, screen->x, screen->y + screen-> height);
                 }
                 else if(event.key == TB_KEY_BACKSPACE || event.key == TB_KEY_BACKSPACE2)
                 {
                     new_file_name->length--;
-                    tb_change_cell(results.query_x + new_file_name->length, results.query_y, (u32)' ', TB_BLACK, TB_BLACK);
+                    tb_change_cell(screen->x + new_file_name->length, screen->y + screen-> height, (u32)' ', TB_BLACK, TB_BLACK);
                     tb_present();
                 }
                 else if(event.key == TB_KEY_SPACE)
@@ -833,7 +844,7 @@ int main()
                         new_file_name = string_new(20);
                     }
                     string_push(new_file_name, ' ');
-                    draw_text(new_file_name, results.query_x, results.query_y);
+                    draw_text(new_file_name, screen->x, screen->y + 1 + screen-> height);
                 }
                 else if(event.key == TB_KEY_ENTER)
                 {
@@ -842,8 +853,8 @@ int main()
                         push_directory(screen->current_directory, new_file_name);
                         string_cstring(screen->current_directory, global_path, global_path_size);
                         pop_directory(screen->current_directory);
-                        close(creat(global_path, O_CLOEXEC));
-                        clear_text(results.query_x, results.query_y, new_file_name->length);
+                        close(open(global_path, O_CREAT|O_EXCL, S_IRUSR + S_IWUSR));
+                        clear_text(screen->x, screen->y + screen-> height, new_file_name->length);
                         new_file_name->length = 0;
                         string_cstring(screen->current_directory, global_path, global_path_size);
                         load_directory(global_path, screen);
@@ -855,7 +866,7 @@ int main()
                 {
                     if(new_file_name)
                     {
-                        clear_text(results.query_x, results.query_y, new_file_name->length);
+                        clear_text(screen->x, screen->y + screen-> height, new_file_name->length);
                         new_file_name->length = 0;
                     }
                     global_mode = NORMAL;
