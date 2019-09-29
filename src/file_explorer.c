@@ -92,6 +92,9 @@ typedef struct
 } SearchBuffer;
 
 static Mode global_mode;
+static char global_path[256];
+static size_t global_path_size = 256;
+
 
 void draw_vertical_line(u32 y_start, u32 y_end, u32 x)
 {
@@ -176,6 +179,21 @@ void exec_search(Buffer *screen, SearchBuffer *results, String *query)
         results->y = screen->y + screen->height - results->num_lines;
     }
     results->view_range_end = results->height;
+
+    // Sort search results by string length. The idea is that shorter strings are closer matches than long strings
+    // with this search system. And there's always more letters that you can add to close in on any longer strings
+    for(u32 i = 0; i < results->num_lines - 1; i++)
+    {
+        for(u32 j = 0; j < results->num_lines - 1 - i; j++)
+        {
+            if(results->buffer[j].text->length >results->buffer[j + 1].text->length)
+            {
+                Result temp = results->buffer[j];
+                results->buffer[j] = results->buffer[j + 1];
+                results->buffer[j + 1] = temp;
+            }
+        }
+    }
 }
 
 void background(u16 bg)
@@ -371,7 +389,7 @@ void draw_search_overlay(Buffer *screen, SearchBuffer *results)
     }
     else
     {
-        screen->view_range_end  = screen->view_range_start + (screen->height - results->height);
+        screen->view_range_end  = screen->view_range_start + (screen->height - 1 - results->height);
         update_screen(screen);
         screen->view_range_end = original_view_end;
     }
@@ -470,6 +488,20 @@ void load_directory(char *path, Buffer *screen)
     }
 }
 
+void init_buffer(Buffer *buf, u32 x, u32 y, u32 width, u32 height, String *directory)
+{
+    buf->x = x;
+    buf->y = y;
+    buf->width = width;
+    buf->height = height;
+    buf->current_directory = directory;
+    buf->buffer = (Line*)calloc(100, sizeof(Line));
+    
+    // Load buffers current directory
+    string_cstring(directory, global_path, global_path_size);
+    load_directory(global_path, buf);
+}
+
 void scroll(Buffer *screen, i32 lines)
 {
     i32 new_start = (i32)screen->view_range_start + lines;
@@ -528,19 +560,17 @@ int main()
     tb_init();
     global_mode = NORMAL;
     struct tb_event event = {};
-    char path[256];
-    size_t size = 256;
-    getcwd(path, size);
+    getcwd(global_path, global_path_size);
 
     Buffer screen = {};
-    screen.current_directory = string_from(path);
+    screen.current_directory = string_from(global_path);
     screen.buffer = (Line*)calloc(100, sizeof(Line));
     screen.y = 0;
     screen.height = tb_height() / 2;
     screen.x = 2;
     screen.width = tb_width() / 2;
     screen.view_range_end = screen.height - 1;
-    load_directory(path, &screen);
+    load_directory(global_path, &screen);
 
     SearchBuffer results = {};
     results.buffer = (Result*)calloc(100, sizeof(Result));
@@ -591,16 +621,16 @@ int main()
                 else if((u8)event.ch == 'h')
                 {
                     pop_directory(screen.current_directory);
-                    string_cstring(screen.current_directory, path, size);
-                    load_directory(path, &screen);
+                    string_cstring(screen.current_directory, global_path, global_path_size);
+                    load_directory(global_path, &screen);
                 }
                 else if((u8)event.ch == 'l' || event.key == TB_KEY_ENTER)
                 {
                     if(screen.buffer[screen.current_line].is_dir)
                     {
                         push_directory(screen.current_directory, screen.buffer[screen.current_line].text);
-                        string_cstring(screen.current_directory, path, size);
-                        load_directory(path, &screen);
+                        string_cstring(screen.current_directory, global_path, global_path_size);
+                        load_directory(global_path, &screen);
                     }
                 }
                 else if(event.key == TB_KEY_CTRL_D)
@@ -618,6 +648,15 @@ int main()
                 else if((u8)event.ch == 'i')
                 {
                     global_mode = INSERT;
+                }
+                else if((u8)event.ch == 'D')
+                {
+                    push_directory(screen.current_directory, screen.buffer[screen.current_line].text);
+                    string_cstring(screen.current_directory, global_path, global_path_size);
+                    unlink(global_path);
+                    pop_directory(screen.current_directory);
+                    string_cstring(screen.current_directory, global_path, global_path_size);
+                    load_directory(global_path, &screen);
                 }
                 else if((u8)event.ch == 'q')
                 {
@@ -739,13 +778,13 @@ int main()
                     if(new_file_name && new_file_name->length > 0)
                     {
                         push_directory(screen.current_directory, new_file_name);
-                        string_cstring(screen.current_directory, path, size);
+                        string_cstring(screen.current_directory, global_path, global_path_size);
                         pop_directory(screen.current_directory);
-                        close(creat(path, O_CLOEXEC));
+                        close(creat(global_path, O_CLOEXEC));
                         clear_text(results.query_x, results.query_y, new_file_name->length);
                         new_file_name->length = 0;
-                        string_cstring(screen.current_directory, path, size);
-                        load_directory(path, &screen);
+                        string_cstring(screen.current_directory, global_path, global_path_size);
+                        load_directory(global_path, &screen);
                         update_screen(&screen);
                     }
                     global_mode = NORMAL;
