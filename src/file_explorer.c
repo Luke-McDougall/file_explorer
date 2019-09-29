@@ -623,7 +623,7 @@ int main()
 
     background(TB_BLACK);
     update_screen(buf);
-    Buffer screen = *global_state_buffers[0];
+    Buffer *screen = global_state_buffers[0];
     b32 running = true;
     while(running)
     {
@@ -634,52 +634,52 @@ int main()
             {
                 if((u8)event.ch == 'j')
                 {
-                    screen.current_line = (screen.current_line + 1) % screen.num_lines;
-                    if(screen.current_line >= screen.view_range_end) scroll(&screen, 1);
-                    if(screen.current_line == 0) 
+                    screen->current_line = (screen->current_line + 1) % screen->num_lines;
+                    if(screen->current_line >= screen->view_range_end) scroll(screen, 1);
+                    if(screen->current_line == 0) 
                     {
-                        clear_normal_buffer_area(&screen);
-                        jump_to_line(&screen, 0);
+                        clear_normal_buffer_area(screen);
+                        jump_to_line(screen, 0);
                     }
                 }
                 else if((u8)event.ch == 'k')
                 {
-                    if(screen.current_line == 0)
+                    if(screen->current_line == 0)
                     {
-                        if(screen.num_lines > screen.view_range_end)
+                        if(screen->num_lines > screen->view_range_end)
                         {
-                            clear_normal_buffer_area(&screen);
+                            clear_normal_buffer_area(screen);
                         }
-                        jump_to_line(&screen, screen.num_lines - 1);
+                        jump_to_line(screen, screen->num_lines - 1);
                     }
                     else
                     {
-                        screen.current_line--;
+                        screen->current_line--;
                     }
-                    if(screen.current_line < screen.view_range_start) scroll(&screen, -1);
+                    if(screen->current_line < screen->view_range_start) scroll(screen, -1);
                 }
                 else if((u8)event.ch == 'h')
                 {
-                    pop_directory(screen.current_directory);
-                    string_cstring(screen.current_directory, global_path, global_path_size);
-                    load_directory(global_path, &screen);
+                    pop_directory(screen->current_directory);
+                    string_cstring(screen->current_directory, global_path, global_path_size);
+                    load_directory(global_path, screen);
                 }
                 else if((u8)event.ch == 'l' || event.key == TB_KEY_ENTER)
                 {
-                    if(screen.buffer[screen.current_line].is_dir)
+                    if(screen->buffer[screen->current_line].is_dir)
                     {
-                        push_directory(screen.current_directory, screen.buffer[screen.current_line].text);
-                        string_cstring(screen.current_directory, global_path, global_path_size);
-                        load_directory(global_path, &screen);
+                        push_directory(screen->current_directory, screen->buffer[screen->current_line].text);
+                        string_cstring(screen->current_directory, global_path, global_path_size);
+                        load_directory(global_path, screen);
                     }
                 }
                 else if(event.key == TB_KEY_CTRL_D)
                 {
-                    jump_to_line(&screen, screen.files_start);
+                    jump_to_line(screen, screen->files_start);
                 }
                 else if(event.key == TB_KEY_CTRL_U)
                 {
-                    jump_to_line(&screen, 0);
+                    jump_to_line(screen, 0);
                 }
                 else if((u8)event.ch == 's')
                 {
@@ -691,27 +691,27 @@ int main()
                 }
                 else if((u8)event.ch == 'v')
                 {
-                    vertical_split(&screen);
+                    vertical_split(screen);
                 }
                 else if((u8)event.ch == 'w')
                 {
                     global_state_active_buffer = (global_state_active_buffer + 1) % global_state_num_buffers;
-                    screen = *(global_state_buffers[global_state_active_buffer]);
+                    screen = global_state_buffers[global_state_active_buffer];
                 }
                 else if((u8)event.ch == 'D')
                 {
-                    push_directory(screen.current_directory, screen.buffer[screen.current_line].text);
-                    string_cstring(screen.current_directory, global_path, global_path_size);
+                    push_directory(screen->current_directory, screen->buffer[screen->current_line].text);
+                    string_cstring(screen->current_directory, global_path, global_path_size);
                     unlink(global_path);
-                    pop_directory(screen.current_directory);
-                    string_cstring(screen.current_directory, global_path, global_path_size);
-                    load_directory(global_path, &screen);
+                    pop_directory(screen->current_directory);
+                    string_cstring(screen->current_directory, global_path, global_path_size);
+                    load_directory(global_path, screen);
                 }
                 else if((u8)event.ch == 'q')
                 {
                     running = false;
                 }
-                update_screen(&screen);
+                update_screen(screen);
             } break;
 
             case SEARCH:
@@ -725,8 +725,8 @@ int main()
                         results.query = string_new(20);
                     }
                     string_push(results.query, (u8)event.ch);
-                    exec_search(&screen, &results, results.query);
-                    draw_search_overlay(&screen, &results);
+                    exec_search(screen, &results, results.query);
+                    draw_search_overlay(screen, &results);
                 }
                 else if(event.key == TB_KEY_SPACE)
                 {
@@ -736,8 +736,8 @@ int main()
                         results.query = string_new(20);
                     }
                     string_push(results.query, ' ');
-                    exec_search(&screen, &results, results.query);
-                    draw_search_overlay(&screen, &results);
+                    exec_search(screen, &results, results.query);
+                    draw_search_overlay(screen, &results);
                 }
                 else if(event.key == TB_KEY_BACKSPACE || event.key == TB_KEY_BACKSPACE2)
                 {
@@ -745,8 +745,8 @@ int main()
                     {
                         clear_search_buffer_area(&results, results.query->length);
                         string_pop(results.query);
-                        exec_search(&screen, &results, results.query);
-                        draw_search_overlay(&screen, &results);
+                        exec_search(screen, &results, results.query);
+                        draw_search_overlay(screen, &results);
                     }
                 }
                 else if(event.key == TB_KEY_TAB)
@@ -763,7 +763,7 @@ int main()
                         results.view_range_end = results.current_line + results.height;
                         clear_search_buffer_area(&results, 0);
                     }
-                    draw_search_overlay(&screen, &results);
+                    draw_search_overlay(screen, &results);
                 }
                 else if(event.key == TB_KEY_ENTER)
                 {
@@ -776,9 +776,9 @@ int main()
                     {
                         clear_search_buffer_area(&results, 0);
                     }
-                    jump_to_line(&screen, results.buffer[results.current_line].original_line_number);
+                    jump_to_line(screen, results.buffer[results.current_line].original_line_number);
                     global_mode = NORMAL;
-                    update_screen(&screen);
+                    update_screen(screen);
                 }
                 else if(event.key == TB_KEY_ESC)
                 {
@@ -792,7 +792,7 @@ int main()
                         clear_search_buffer_area(&results, 0);
                     }
                     global_mode = NORMAL;
-                    update_screen(&screen);
+                    update_screen(screen);
                 }
             } break;
 
@@ -826,15 +826,15 @@ int main()
                 {
                     if(new_file_name && new_file_name->length > 0)
                     {
-                        push_directory(screen.current_directory, new_file_name);
-                        string_cstring(screen.current_directory, global_path, global_path_size);
-                        pop_directory(screen.current_directory);
+                        push_directory(screen->current_directory, new_file_name);
+                        string_cstring(screen->current_directory, global_path, global_path_size);
+                        pop_directory(screen->current_directory);
                         close(creat(global_path, O_CLOEXEC));
                         clear_text(results.query_x, results.query_y, new_file_name->length);
                         new_file_name->length = 0;
-                        string_cstring(screen.current_directory, global_path, global_path_size);
-                        load_directory(global_path, &screen);
-                        update_screen(&screen);
+                        string_cstring(screen->current_directory, global_path, global_path_size);
+                        load_directory(global_path, screen);
+                        update_screen(screen);
                     }
                     global_mode = NORMAL;
                 }
@@ -850,14 +850,6 @@ int main()
             } break;
         }
     }
-    for(int i = 0; i < 100; i++)
-    {
-        if(screen.buffer[i].text != NULL)
-        {
-            string_free(screen.buffer[i].text);
-        }
-    }
-    free(screen.buffer);
     tb_shutdown();
     return 0;
 }
