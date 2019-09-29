@@ -182,15 +182,18 @@ void exec_search(Buffer *screen, SearchBuffer *results, String *query)
 
     // Sort search results by string length. The idea is that shorter strings are closer matches than long strings
     // with this search system. And there's always more letters that you can add to close in on any longer strings
-    for(u32 i = 0; i < results->num_lines - 1; i++)
+    if(results->num_lines > 0)
     {
-        for(u32 j = 0; j < results->num_lines - 1 - i; j++)
+        for(u32 i = 0; i < results->num_lines - 1; i++)
         {
-            if(results->buffer[j].text->length >results->buffer[j + 1].text->length)
+            for(u32 j = 0; j < results->num_lines - 1 - i; j++)
             {
-                Result temp = results->buffer[j];
-                results->buffer[j] = results->buffer[j + 1];
-                results->buffer[j + 1] = temp;
+                if(results->buffer[j].text->length >results->buffer[j + 1].text->length)
+                {
+                    Result temp = results->buffer[j];
+                    results->buffer[j] = results->buffer[j + 1];
+                    results->buffer[j + 1] = temp;
+                }
             }
         }
     }
