@@ -29,6 +29,13 @@ typedef enum
     VISUAL,
 } Mode;
 
+typedef enum
+{
+    DELETE,
+    COPY,
+    MOVE,
+} OperationType;
+
 typedef struct
 {
     String *text;
@@ -242,24 +249,25 @@ void clear_normal_buffer_area(Buffer *screen)
 void clear_search_buffer_area(SearchBuffer *results, u32 query_length)
 {
     struct tb_cell *tb_buffer = tb_cell_buffer();
+    u32 tb_index = tb_width() * results->query_y;
 
     // Clear query
     for(u32 x = results->query_x; x < results->query_x + query_length; x++)
     {
-        u32 tb_index = x + tb_width() * (results->query_y);
-        tb_buffer[tb_index].ch = (u32)' ';
-        tb_buffer[tb_index].bg = TB_BLACK;
+        tb_buffer[tb_index + x].ch = (u32)' ';
+        tb_buffer[tb_index + x].bg = TB_BLACK;
     }
 
     // Clear rest of buffer
+    tb_index = tb_width() * results->y;
     for(u32 y = results->y; y < results->y + results->height; y++)
     {
         for(u32 x = results->x; x < results->x + results->width; x++)
         {
-            u32 tb_index = x + tb_width() * y;
-            tb_buffer[tb_index].ch = (u32)' ';
-            tb_buffer[tb_index].bg = TB_BLACK;
+            tb_buffer[tb_index + x].ch = (u32)' ';
+            tb_buffer[tb_index + x].bg = TB_BLACK;
         }
+        tb_index += tb_width();
     }
     tb_present();
 }
@@ -719,13 +727,18 @@ int main()
                 // 0x21 - 0x7E is the range of valid ascii character codes that can be added to the query
                 if((u8)event.ch >= 0x21 && (u8)event.ch <= 0x7E)
                 {
-                    clear_search_buffer_area(&results, 0);
                     if(!results.query)
                     {
                         results.query = string_new(20);
                     }
                     string_push(results.query, (u8)event.ch);
                     exec_search(screen, &results, results.query);
+                    
+                    // NOTE(Luke): Clearing the search buffer before executing the search was causing a bug
+                    // that cleared the previous position on the screen instead of the updated one. Keep things
+                    // like this in mind in the future with multiple buffers!!!
+
+                    clear_search_buffer_area(&results, 0);
                     draw_search_overlay(screen, &results);
                 }
                 else if(event.key == TB_KEY_SPACE)
