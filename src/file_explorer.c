@@ -34,7 +34,18 @@ typedef enum
     DELETE,
     COPY,
     MOVE,
+    NOOP,
 } OperationType;
+
+typedef struct
+{
+    OperationType type;
+    b32 is_dir;
+
+    String *name;
+    String *in_path;
+    String *out_path;
+} Operation;
 
 typedef struct
 {
@@ -602,14 +613,23 @@ void vertical_split(Buffer *buffer)
 }
 
 // TODO(Luke): This, like all file IO, needs to handle errors at some point buddy boy
-void copy_file(char *src_file, char *dst_file)
+void copy_file(String *src_file, String *dst_file)
 {
+    string_cstring(src_file, global_path, global_path_size);
     struct stat statbuf;
-    stat(src_file, &statbuf);
+    stat(global_path, &statbuf);
     size_t length = statbuf.st_size;
-    int fd_in = open(src_file, O_RDONLY);
-    int fd_out = open(dst_file, O_CREAT|O_EXCL, S_IRUSR + S_IWUSR);
-    ssize_t result = copy_file_range(fd_in, NULL, fd_out, NULL, length, 0);
+
+    int fd_in = open(global_path, O_RDONLY);
+
+    string_cstring(dst_file, global_path, global_path_size);
+
+    // O_CREAT|O_EXCL ensure a new file is created and S_IRUSR + S_IWUSR sets read and write permissions for the user
+    int fd_out = open(global_path, O_WRONLY|O_CREAT|O_EXCL, S_IRUSR + S_IWUSR); 
+
+    copy_file_range(fd_in, NULL, fd_out, NULL, length, 0);
+    close(fd_in);
+    close(fd_out);
 }
 
 int main()
@@ -639,6 +659,11 @@ int main()
 
     // Name of new file created. Might move this somewhere else some time
     String *new_file_name = NULL;
+
+    // Temporary operation struct used to test the concept. This will be changed
+    // later when I implement batch operations.
+    Operation op = {};
+    op.type = NOOP;
 
     background(TB_BLACK);
     update_screen(buf);
@@ -700,6 +725,44 @@ int main()
                 {
                     jump_to_line(screen, 0);
                 }
+                else if((u8)event.ch == 'D')
+                {
+                    push_directory(screen->current_directory, screen->buffer[screen->current_line].text);
+                    string_cstring(screen->current_directory, global_path, global_path_size);
+                    unlink(global_path);
+                    pop_directory(screen->current_directory);
+                    string_cstring(screen->current_directory, global_path, global_path_size);
+                    load_directory(global_path, screen);
+                }
+                else if((u8)event.ch == 'c')
+                {
+                    op.type = COPY;
+                    op.name = string_copy(screen->buffer[screen->current_line].text);
+                    op.in_path = string_copy(screen->current_directory);
+                    op.is_dir = screen->buffer[screen->current_line].is_dir;
+                }
+                else if((u8)event.ch == 'p')
+                {
+                    if(op.type != NOOP)
+                    {
+                        if(op.type == COPY)
+                        {
+                            op.out_path = string_copy(screen->current_directory);
+                            push_directory(op.in_path, op.name);
+                            push_directory(op.out_path, op.name);
+
+                            copy_file(op.in_path, op.out_path);
+
+                            string_free(op.name);
+                            string_free(op.in_path);
+                            string_free(op.out_path);
+                            op.name = NULL;
+                            op.in_path = NULL;
+                            op.out_path = NULL;
+                            op.type = NOOP;
+                        }
+                    }
+                }
                 else if((u8)event.ch == 's')
                 {
                     global_mode = SEARCH;
@@ -716,15 +779,6 @@ int main()
                 {
                     global_state_active_buffer = (global_state_active_buffer + 1) % global_state_num_buffers;
                     screen = global_state_buffers[global_state_active_buffer];
-                }
-                else if((u8)event.ch == 'D')
-                {
-                    push_directory(screen->current_directory, screen->buffer[screen->current_line].text);
-                    string_cstring(screen->current_directory, global_path, global_path_size);
-                    unlink(global_path);
-                    pop_directory(screen->current_directory);
-                    string_cstring(screen->current_directory, global_path, global_path_size);
-                    load_directory(global_path, screen);
                 }
                 else if((u8)event.ch == 'q')
                 {
