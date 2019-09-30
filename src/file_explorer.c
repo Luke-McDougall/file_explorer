@@ -21,6 +21,7 @@
 
 
 
+
 typedef enum
 {
     INSERT,
@@ -108,6 +109,10 @@ typedef struct
 
     Result *buffer;
 } SearchBuffer;
+
+// Finally doing some forward declarations because caring about the order of the functions is getting annoying
+void draw_text(String*, u32, u32);
+void clear_text(u32, u32, u32);
 
 #define MAX_BUFFERS 4
 
@@ -263,11 +268,12 @@ void clear_search_buffer_area(SearchBuffer *results, u32 query_length)
     u32 tb_index = tb_width() * results->query_y;
 
     // Clear query
-    for(u32 x = results->query_x; x < results->query_x + query_length; x++)
-    {
-        tb_buffer[tb_index + x].ch = (u32)' ';
-        tb_buffer[tb_index + x].bg = TB_BLACK;
-    }
+    //for(u32 x = results->query_x; x < results->query_x + query_length; x++)
+    //{
+    //    tb_buffer[tb_index + x].ch = (u32)' ';
+    //    tb_buffer[tb_index + x].bg = TB_BLACK;
+    //}
+    clear_text(results->query_x, results->query_y, results->query->length);
 
     // Clear rest of buffer
     tb_index = tb_width() * results->y;
@@ -300,6 +306,7 @@ void update_screen(Buffer *screen)
             tb_change_cell(i + screen->x + 18, screen->y, (u32)screen->current_directory->start[i], TB_WHITE, TB_BLACK);
         }
     }
+    draw_text(NULL, screen->x, screen->y + screen->height);
 
     u32 end_y;
     if(screen->num_lines < screen->view_range_end)
@@ -356,18 +363,19 @@ void update_search_screen(SearchBuffer *results)
     struct tb_cell *tb_buffer = tb_cell_buffer();
     
     // Draw query bar
-    {
-        u32 x = results->query_x;
-        u32 y = results->query_y;
-        u32 length = results->query->length;
-        for(u32 i = 0; i < length; i++)
-        {
-            u32 tb_index = x + i + tb_width() * y;
-            tb_buffer[tb_index].ch = (u32)results->query->start[i];
-            tb_buffer[tb_index].fg = TB_WHITE;
-            tb_buffer[tb_index].bg = TB_BLACK;
-        }
-    }
+    //{
+    //    u32 x = results->query_x;
+    //    u32 y = results->query_y;
+    //    u32 length = results->query->length;
+    //    for(u32 i = 0; i < length; i++)
+    //    {
+    //        u32 tb_index = x + i + tb_width() * y;
+    //        tb_buffer[tb_index].ch = (u32)results->query->start[i];
+    //        tb_buffer[tb_index].fg = TB_WHITE;
+    //        tb_buffer[tb_index].bg = TB_BLACK;
+    //    }
+    //}
+    draw_text(results->query, results->query_x, results->query_y);
 
     u32 end;
     if(results->num_lines < results->view_range_end) 
@@ -572,20 +580,58 @@ void search_scroll(SearchBuffer *results)
     clear_search_buffer_area(results, 0);
 }
 
+// Pass NULL for text to only print the global mode.
 void draw_text(String *text, u32 x, u32 y)
 {
-    for(u32 i = 0; i < text->length; i++)
+    char *mode;
+    u16 bg;
+    const u32 text_off = 7;
+
+    switch(global_mode)
     {
-        tb_change_cell(x + i, y, (u32)text->start[i], TB_WHITE, TB_BLACK);
+        case NORMAL:
+        mode = "NORMAL";
+        bg = TB_BLUE;
+        break;
+
+        case SEARCH:
+        mode = "SEARCH";
+        bg = TB_MAGENTA;
+        break;
+
+        case INSERT:
+        mode = "INSERT";
+        bg = TB_GREEN;
+        break;
+
+        case VISUAL:
+        mode = "VISUAL";
+        bg = TB_YELLOW;
+        break;
     }
+
+    for(u32 i = 0; i < text_off - 1; i++)
+    {
+        tb_change_cell(x + i, y, (u32)mode[i], TB_BLACK, bg);
+    }
+
+    if(text)
+    {
+        for(u32 i = 0; i < text->length; i++)
+        {
+            tb_change_cell(x + i + text_off, y, (u32)text->start[i], TB_WHITE, TB_BLACK);
+        }
+    }
+
     tb_present();
 }
 
 void clear_text(u32 x, u32 y, u32 length)
 {
+    const u32 text_off = 7;
     for(u32 i = 0; i < length; i++)
     {
-        tb_change_cell(x + i, y, (u32)' ', TB_WHITE, TB_BLACK);
+        tb_change_cell(x + i + text_off, y, (u32)' ', TB_WHITE, TB_BLACK);
     }
     tb_present();
 }
@@ -760,6 +806,10 @@ int main()
                             op.in_path = NULL;
                             op.out_path = NULL;
                             op.type = NOOP;
+
+                            // Reload directory to see the results copy
+                            string_cstring(screen->current_directory, global_path, global_path_size);
+                            load_directory(global_path, screen);
                         }
                     }
                 }
