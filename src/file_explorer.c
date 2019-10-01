@@ -199,13 +199,13 @@ void exec_search(Buffer *screen, SearchBuffer *results, String *query)
         }
     }
 
-    u32 max_height = screen->height / 4;
+    u32 max_height            = screen->height / 4;
     results->view_range_start = 0;
-    results->current_line = 0;
-    results->query_x = screen->x;
-    results->query_y = screen->y + screen->height;
-    results->x = screen->x;
-    results->width = screen->width / 2;
+    results->current_line     = 0;
+    results->query_x          = screen->x;
+    results->query_y          = screen->y + screen->height;
+    results->x                = screen->x;
+    results->width            = screen->width / 2;
     if(results->num_lines > max_height)
     {
         results->height = max_height;
@@ -534,15 +534,15 @@ void load_directory(char *path, Buffer *screen)
 
 void init_buffer(Buffer *buf, u32 x, u32 y, u32 width, u32 height, String *directory)
 {
-    buf->x = x;
-    buf->y = y;
-    buf->width = width;
-    buf->height = height;
-    buf->view_range_start = 0;
-    buf->view_range_end = height - 1;
-    buf->current_line = 0;
+    buf->x                 = x;
+    buf->y                 = y;
+    buf->width             = width;
+    buf->height            = height;
+    buf->view_range_start  = 0;
+    buf->view_range_end    = height - 1;
+    buf->current_line      = 0;
     buf->current_directory = string_copy(directory);
-    buf->buffer = (Line*)calloc(100, sizeof(Line));
+    buf->buffer            = (Line*)calloc(100, sizeof(Line));
     
     // Load buffers current directory
     string_cstring(directory, global_path, global_path_size);
