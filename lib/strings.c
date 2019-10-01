@@ -190,7 +190,7 @@ string_push(String *str, char c)
         }
         new_str[str->capacity] = c;
         str->length++;
-        str->capacity = str->length * 2;
+        str->capacity = (str->capacity + 1) * 2;
         free(str->start);
         str->start = new_str;
     }

@@ -20,6 +20,10 @@
 // 6. General robustness/error handling stuff that will be very tedious
 
 
+// Maybe ideas.
+// 1. add an x offset field to Buffer 
+
+
 
 
 typedef enum
@@ -114,7 +118,7 @@ typedef struct
 void draw_text(String*, u32, u32);
 void clear_text(u32, u32, u32);
 
-#define MAX_BUFFERS 4
+#define MAX_BUFFERS 2
 
 static u32 global_state_active_buffer;
 static u32 global_state_num_buffers;
@@ -685,20 +689,20 @@ int main()
     struct tb_event event = {};
     getcwd(global_path, global_path_size);
 
-    Buffer *buf = (Buffer*)malloc(sizeof(Buffer));
+    Buffer *buf            = (Buffer*)malloc(sizeof(Buffer));
     buf->current_directory = string_from(global_path);
-    buf->buffer = (Line*)calloc(100, sizeof(Line));
-    buf->y = 0;
-    buf->height = tb_height() - 1;
-    buf->x = 2;
-    buf->width = tb_width() - 10;
-    buf->view_range_end = buf->height - 1;
+    buf->buffer            = (Line*)calloc(100, sizeof(Line));
+    buf->x                 = 2;
+    buf->y                 = 0;
+    buf->width             = tb_width() - 10;
+    buf->height            = tb_height() - 1;
+
     load_directory(global_path, buf);
 
-    global_state_num_buffers = 1;
+    global_state_buffers       = (Buffer**)malloc(sizeof(Buffer*) * MAX_BUFFERS);
+    global_state_num_buffers   = 1;
     global_state_active_buffer = 0;
-    global_state_buffers = (Buffer**)malloc(sizeof(Buffer*) * MAX_BUFFERS);
-    global_state_buffers[0] = buf;
+    global_state_buffers[0]    = buf;
 
     SearchBuffer results = {};
     results.buffer = (Result*)calloc(100, sizeof(Result));
@@ -783,8 +787,18 @@ int main()
                 else if((u8)event.ch == 'c')
                 {
                     op.type = COPY;
-                    op.name = string_copy(screen->buffer[screen->current_line].text);
-                    op.in_path = string_copy(screen->current_directory);
+                    if(op.name)
+                    {
+                        String *new_name = screen->buffer[screen->current_line].text;
+                        String *new_in_path = screen->current_directory;
+                        string_replace(op.name, new_name->start, new_name->length);
+                        string_replace(op.in_path, new_in_path->start, new_in_path->length);
+                    }
+                    else
+                    {
+                        op.name = string_copy(screen->buffer[screen->current_line].text);
+                        op.in_path = string_copy(screen->current_directory);
+                    }
                     op.is_dir = screen->buffer[screen->current_line].is_dir;
                 }
                 else if((u8)event.ch == 'p')
@@ -793,18 +807,20 @@ int main()
                     {
                         if(op.type == COPY)
                         {
-                            op.out_path = string_copy(screen->current_directory);
+                            if(op.out_path)
+                            {
+                                String *new_out_path = screen->current_directory;
+                                string_replace(op.out_path, new_out_path->start, new_out_path->length);
+                            }
+                            else
+                            {
+                                op.out_path = string_copy(screen->current_directory);
+                            }
                             push_directory(op.in_path, op.name);
                             push_directory(op.out_path, op.name);
 
                             copy_file(op.in_path, op.out_path);
 
-                            string_free(op.name);
-                            string_free(op.in_path);
-                            string_free(op.out_path);
-                            op.name = NULL;
-                            op.in_path = NULL;
-                            op.out_path = NULL;
                             op.type = NOOP;
 
                             // Reload directory to see the results copy
@@ -978,6 +994,26 @@ int main()
             } break;
         }
     }
+    /*
+    for(u32 k = 0; k < global_state_num_buffers; k++)
+    {
+        screen = global_state_buffers[k];
+        for(u32 i = 0; i < 100; i++)
+        {
+            if(screen->buffer[i].text) string_free(screen->buffer[i].text);
+        }
+        string_free(screen->current_directory);
+        free(screen->buffer);
+        free(screen);
+    }
+    free(global_state_buffers);
+    free(results.buffer);
+    if(results.query) string_free(results.query);
+    if(new_file_name) string_free(new_file_name);
+    if(op.name) string_free(op.name);
+    if(op.in_path) string_free(op.in_path);
+    if(op.out_path) string_free(op.out_path);
+    */
     tb_shutdown();
     return 0;
 }
