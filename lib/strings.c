@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <stdio.h>
 #include "../include/strings.h"
 
 String*
@@ -232,6 +233,15 @@ string_push_str(String *str, char *cstr, size_t length)
         str->capacity = new_length * 2;
         free(str->start);
         str->start = new_str;
+    }
+}
+
+void 
+string_print(String *str)
+{
+    for(u32 i = 0; i < str->length; i++)
+    {
+        putc(str->start[i], stdout);
     }
 }
 

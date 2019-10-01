@@ -46,11 +46,20 @@ typedef struct
 {
     OperationType type;
     b32 is_dir;
-
+    
     String *name;
     String *in_path;
     String *out_path;
 } Operation;
+
+typedef struct
+{
+    u32 size;
+    u32 capacity;
+    u32 start;
+    u32 end;
+    Operation *data;
+} OperationQueue;
 
 typedef struct
 {
@@ -69,14 +78,14 @@ typedef struct
 typedef struct 
 {
     String *current_directory;
-
+    
     // x, y coordinates of the top left of the buffer
     // plus width and height of the buffer.
     u32 x;
     u32 y;
     u32 height;
     u32 width;
-
+    
     u32 current_line;
     u32 num_lines;
     u32 view_range_start;
@@ -85,7 +94,7 @@ typedef struct
     // view_range_end is one more than the last line with visible text
     // should always be view_range_start + height - 1 because first row is for the title
     u32 view_range_end;
-
+    
     Line *buffer;
 } Buffer;
 
@@ -99,18 +108,18 @@ typedef struct
     u32 y;
     u32 height;
     u32 width;
-
+    
     String *query;
     u32 query_x;
     u32 query_y;
-
+    
     i32 current_line;
     u32 num_lines;
     u32 view_range_start;
     // view_range_end is one more than the last line with visible text
     // should always be view_range_start + height
     u32 view_range_end;
-
+    
     Result *buffer;
 } SearchBuffer;
 
@@ -128,6 +137,51 @@ static Mode global_mode;
 static char global_path[256];
 static size_t global_path_size = 256;
 
+
+OperationQueue *queue_new(u32 capacity)
+{
+    OperationQueue *op = (OperationQueue*)malloc(sizeof(OperationQueue));
+    op->capacity       = capacity;
+    op->size           = 0;
+    op->start          = 0;
+    op->end            = 0;
+    op->data           = (Operation*)calloc(capacity, sizeof(Operation));
+    return op;
+}
+
+Operation dequeue(OperationQueue *op)
+{
+    Operation operation = op->data[op->start];
+    op->start = (op->start + 1) % op->capacity;
+    op->size--;
+    return operation;
+}
+
+void enqueue(OperationQueue *op, Operation operation)
+{
+    if(op->size < op->capacity)
+    {
+        op->data[op->end] = operation;
+        op->end = (op->end + 1) % op->capacity;
+        op->size++;
+    }
+    else
+    {
+        Operation *new_data = (Operation*)calloc(op->capacity * 2, sizeof(Operation));
+        for(u32 i = 0; i < op->size; i++)
+        {
+            u32 index = (i + op->start) % op->capacity;
+            new_data[i] = op->data[index];
+        }
+        new_data[op->size] = operation;
+        free(op->data);
+        op->capacity *= 2;
+        op->size++;
+        op->start = 0;
+        op->end = op->size;
+        op->data = new_data;
+    }
+}
 
 void draw_vertical_line(u32 y_start, u32 y_end, u32 x)
 {
@@ -198,7 +252,7 @@ void exec_search(Buffer *screen, SearchBuffer *results, String *query)
             }
         }
     }
-
+    
     u32 max_height            = screen->height / 4;
     results->view_range_start = 0;
     results->current_line     = 0;
@@ -217,7 +271,7 @@ void exec_search(Buffer *screen, SearchBuffer *results, String *query)
         results->y = screen->y + screen->height - results->num_lines;
     }
     results->view_range_end = results->height;
-
+    
     // Sort search results by string length. The idea is that shorter strings are closer matches than long strings
     // with this search system. And there's always more letters that you can add to close in on any longer strings
     if(results->num_lines > 1)
@@ -252,7 +306,7 @@ void background(u16 bg)
 void clear_normal_buffer_area(Buffer *screen)
 {
     struct tb_cell *tb_buffer = tb_cell_buffer();
-
+    
     for(u32 y = screen->y; y < screen->y + screen->height; y++)
     {
         for(u32 x = screen->x; x < screen->x + screen->width; x++)
@@ -270,7 +324,7 @@ void clear_search_buffer_area(SearchBuffer *results, u32 query_length)
 {
     struct tb_cell *tb_buffer = tb_cell_buffer();
     u32 tb_index = tb_width() * results->query_y;
-
+    
     // Clear query
     //for(u32 x = results->query_x; x < results->query_x + query_length; x++)
     //{
@@ -278,7 +332,7 @@ void clear_search_buffer_area(SearchBuffer *results, u32 query_length)
     //    tb_buffer[tb_index + x].bg = TB_BLACK;
     //}
     clear_text(results->query_x, results->query_y, results->query->length);
-
+    
     // Clear rest of buffer
     tb_index = tb_width() * results->y;
     for(u32 y = results->y; y < results->y + results->height; y++)
@@ -296,11 +350,11 @@ void clear_search_buffer_area(SearchBuffer *results, u32 query_length)
 void update_screen(Buffer *screen)
 {
     struct tb_cell *tb_buffer = tb_cell_buffer();
-
+    
     // Draw title
     {
         static char title[19] = "Current Directory:";
-
+        
         for(u32 i = 0; i < 18; i++)
         {
             tb_change_cell(i + screen->x, screen->y, (u32)title[i], TB_WHITE, TB_BLACK);
@@ -311,7 +365,7 @@ void update_screen(Buffer *screen)
         }
     }
     draw_text(NULL, screen->x, screen->y + screen->height);
-
+    
     u32 end_y;
     if(screen->num_lines < screen->view_range_end)
     {
@@ -321,7 +375,7 @@ void update_screen(Buffer *screen)
     {
         end_y = screen->view_range_end;
     }
-
+    
     for(u32 y = screen->view_range_start; y < end_y; y++)
     {
         Line line = screen->buffer[y];
@@ -333,7 +387,7 @@ void update_screen(Buffer *screen)
             tb_buffer[end_line].fg = TB_WHITE;
             tb_buffer[end_line].bg = y == screen->current_line ? TB_BLUE : TB_BLACK;
         }
-
+        
         u32 end_x;
         if(screen->x + screen->width < line.text->length)
         {
@@ -343,7 +397,7 @@ void update_screen(Buffer *screen)
         {
             end_x = line.text->length;
         }
-
+        
         for(u32 x = 0; x < end_x; x++)
         {
             u32 tb_index = screen->x + x + tb_width() * (screen->y + y - screen->view_range_start + 1);
@@ -352,13 +406,13 @@ void update_screen(Buffer *screen)
             tb_buffer[tb_index].bg = y == screen->current_line ? TB_BLUE : TB_BLACK;
         }
     }
-
+    
     for(u32 i = 0; i < tb_width(); i++)
     {
         u32 index = i + tb_width() * (screen->y + screen->height - 1);
         tb_buffer[index].fg = TB_WHITE | TB_UNDERLINE;
     }
-
+    
     tb_present();
 }
 
@@ -380,7 +434,7 @@ void update_search_screen(SearchBuffer *results)
     //    }
     //}
     draw_text(results->query, results->query_x, results->query_y);
-
+    
     u32 end;
     if(results->num_lines < results->view_range_end) 
     {
@@ -390,7 +444,7 @@ void update_search_screen(SearchBuffer *results)
     {
         end = results->view_range_end;
     }
-
+    
     for(u32 y = results->view_range_start; y < end; y++)
     {
         Result line = results->buffer[y];
@@ -402,7 +456,7 @@ void update_search_screen(SearchBuffer *results)
             tb_buffer[end_line].fg = TB_WHITE;
             tb_buffer[end_line].bg = y == results->current_line ? TB_BLUE : TB_BLACK;
         }
-
+        
         u16 bg = y == results->current_line ? TB_MAGENTA : TB_WHITE;
         for(u32 x = 0; x < line.text->length; x++)
         {
@@ -444,7 +498,7 @@ int pop_directory(String *path)
 {
     i32 index = (i32)(path->length - 1);
     char c;
-
+    
     while(index >= 0)
     {
         c = path->start[index];
@@ -484,10 +538,10 @@ void load_directory(char *path, Buffer *screen)
         screen->num_lines++;
     }
     closedir(cwd);
-
+    
     screen->view_range_end = screen->height - 1;
     screen->view_range_start = 0;
-
+    
     // Segregate directories and regular files
     u32 dir_end = 0;
     u32 length = screen->num_lines;
@@ -502,7 +556,7 @@ void load_directory(char *path, Buffer *screen)
         }
     }
     screen->files_start = dir_end;
-
+    
     // Sort directory portion
     for(u32 i = 0; i < dir_end - 1; i++)
     {
@@ -516,7 +570,7 @@ void load_directory(char *path, Buffer *screen)
             }
         }
     }
-
+    
     // Sort file portion
     for(u32 i = dir_end; i < length - 1; i++)
     {
@@ -564,7 +618,7 @@ void scroll(Buffer *screen, i32 lines)
 void jump_to_line(Buffer *screen, u32 line_number)
 {
     screen->current_line = line_number;
-
+    
     if(screen->current_line < screen->view_range_start)
     {
         i32 diff = screen->current_line - screen->view_range_start;
@@ -590,35 +644,35 @@ void draw_text(String *text, u32 x, u32 y)
     char *mode;
     u16 bg;
     const u32 text_off = 7;
-
+    
     switch(global_mode)
     {
         case NORMAL:
         mode = "NORMAL";
         bg = TB_BLUE;
         break;
-
+        
         case SEARCH:
         mode = "SEARCH";
         bg = TB_MAGENTA;
         break;
-
+        
         case INSERT:
         mode = "INSERT";
         bg = TB_GREEN;
         break;
-
+        
         case VISUAL:
         mode = "VISUAL";
         bg = TB_YELLOW;
         break;
     }
-
+    
     for(u32 i = 0; i < text_off - 1; i++)
     {
         tb_change_cell(x + i, y, (u32)mode[i], TB_BLACK, bg);
     }
-
+    
     if(text)
     {
         for(u32 i = 0; i < text->length; i++)
@@ -626,7 +680,7 @@ void draw_text(String *text, u32 x, u32 y)
             tb_change_cell(x + i + text_off, y, (u32)text->start[i], TB_WHITE, TB_BLACK);
         }
     }
-
+    
     tb_present();
 }
 
@@ -648,14 +702,14 @@ void vertical_split(Buffer *buffer)
         u32 buffer_height = buffer->height;
         u32 x_off = buffer->x;
         u32 y_off = buffer->y;
-
+        
         buffer->width = buffer_width;
-
+        
         Buffer *buffer2 = (Buffer*)malloc(sizeof(Buffer));
-
+        
         init_buffer(buffer2, x_off * 2 + buffer_width, y_off, buffer_width, buffer_height, buffer->current_directory);
         global_state_buffers[global_state_num_buffers++] = buffer2;
-
+        
         update_screen(buffer);
         update_screen(buffer2);
         draw_vertical_line(0, tb_height(), buffer->x + buffer->width);
@@ -669,14 +723,14 @@ void copy_file(String *src_file, String *dst_file)
     struct stat statbuf;
     stat(global_path, &statbuf);
     size_t length = statbuf.st_size;
-
+    
     int fd_in = open(global_path, O_RDONLY);
-
+    
     string_cstring(dst_file, global_path, global_path_size);
-
+    
     // O_CREAT|O_EXCL ensure a new file is created and S_IRUSR + S_IWUSR sets read and write permissions for the user
     int fd_out = open(global_path, O_WRONLY|O_CREAT|O_EXCL, S_IRUSR + S_IWUSR); 
-
+    
     copy_file_range(fd_in, NULL, fd_out, NULL, length, 0);
     close(fd_in);
     close(fd_out);
@@ -688,7 +742,7 @@ int main()
     global_mode = NORMAL;
     struct tb_event event = {};
     getcwd(global_path, global_path_size);
-
+    
     Buffer *buf            = (Buffer*)malloc(sizeof(Buffer));
     buf->current_directory = string_from(global_path);
     buf->buffer            = (Line*)calloc(100, sizeof(Line));
@@ -696,25 +750,25 @@ int main()
     buf->y                 = 0;
     buf->width             = tb_width() - 10;
     buf->height            = tb_height() - 1;
-
+    
     load_directory(global_path, buf);
-
+    
     global_state_buffers       = (Buffer**)malloc(sizeof(Buffer*) * MAX_BUFFERS);
     global_state_num_buffers   = 1;
     global_state_active_buffer = 0;
     global_state_buffers[0]    = buf;
-
+    
     SearchBuffer results = {};
     results.buffer = (Result*)calloc(100, sizeof(Result));
-
+    
     // Name of new file created. Might move this somewhere else some time
     String *new_file_name = NULL;
-
+    
     // Temporary operation struct used to test the concept. This will be changed
     // later when I implement batch operations.
-    Operation op = {};
-    op.type = NOOP;
-
+    OperationQueue *op = queue_new(5);
+    Operation operation = {};
+    
     background(TB_BLACK);
     update_screen(buf);
     Buffer *screen = global_state_buffers[0];
@@ -786,43 +840,33 @@ int main()
                 }
                 else if((u8)event.ch == 'c')
                 {
-                    op.type = COPY;
-                    if(op.name)
-                    {
-                        String *new_name = screen->buffer[screen->current_line].text;
-                        String *new_in_path = screen->current_directory;
-                        string_replace(op.name, new_name->start, new_name->length);
-                        string_replace(op.in_path, new_in_path->start, new_in_path->length);
-                    }
-                    else
-                    {
-                        op.name = string_copy(screen->buffer[screen->current_line].text);
-                        op.in_path = string_copy(screen->current_directory);
-                    }
-                    op.is_dir = screen->buffer[screen->current_line].is_dir;
+                    operation.type = COPY;
+                    operation.name = string_copy(screen->buffer[screen->current_line].text);
+                    operation.in_path = string_copy(screen->current_directory);
+                    operation.is_dir = screen->buffer[screen->current_line].is_dir;
+                    enqueue(op, operation);
                 }
                 else if((u8)event.ch == 'p')
                 {
-                    if(op.type != NOOP)
+                    if(op->size > 0)
                     {
-                        if(op.type == COPY)
+                        operation = dequeue(op);
+                        if(operation.type == COPY)
                         {
-                            if(op.out_path)
+                            if(operation.out_path)
                             {
                                 String *new_out_path = screen->current_directory;
-                                string_replace(op.out_path, new_out_path->start, new_out_path->length);
+                                string_replace(operation.out_path, new_out_path->start, new_out_path->length);
                             }
                             else
                             {
-                                op.out_path = string_copy(screen->current_directory);
+                                operation.out_path = string_copy(screen->current_directory);
                             }
-                            push_directory(op.in_path, op.name);
-                            push_directory(op.out_path, op.name);
-
-                            copy_file(op.in_path, op.out_path);
-
-                            op.type = NOOP;
-
+                            push_directory(operation.in_path, operation.name);
+                            push_directory(operation.out_path, operation.name);
+                            
+                            copy_file(operation.in_path, operation.out_path);
+                            
                             // Reload directory to see the results copy
                             string_cstring(screen->current_directory, global_path, global_path_size);
                             load_directory(global_path, screen);
@@ -852,7 +896,7 @@ int main()
                 }
                 update_screen(screen);
             } break;
-
+            
             case SEARCH:
             {
                 // 0x21 - 0x7E is the range of valid ascii character codes that can be added to the query
@@ -868,7 +912,7 @@ int main()
                     // NOTE(Luke): Clearing the search buffer before executing the search was causing a bug
                     // that cleared the previous position on the screen instead of the updated one. Keep things
                     // like this in mind in the future with multiple buffers!!!
-
+                    
                     clear_search_buffer_area(&results, 0);
                     draw_search_overlay(screen, &results);
                 }
@@ -939,7 +983,7 @@ int main()
                     update_screen(screen);
                 }
             } break;
-
+            
             case INSERT:
             {
                 if((u8)event.ch >= 0x21 && (u8)event.ch <= 0x7E)
@@ -992,10 +1036,10 @@ int main()
                     global_mode = NORMAL;
                 }
             } break;
-
+            
             case VISUAL:
             {
-
+                
             } break;
         }
     }
