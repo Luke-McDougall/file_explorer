@@ -416,6 +416,82 @@ void update_screen(Buffer *screen)
     tb_present();
 }
 
+void update_visual_screen(Buffer *screen, u32 start, u32 end)
+{
+    struct tb_cell *tb_buffer = tb_cell_buffer();
+    
+    // Draw title
+    {
+        static char title[19] = "Current Directory:";
+        
+        for(u32 i = 0; i < 18; i++)
+        {
+            tb_change_cell(i + screen->x, screen->y, (u32)title[i], TB_WHITE, TB_BLACK);
+        }
+        for(u32 i = 0; i < screen->current_directory->length; i++)
+        {
+            tb_change_cell(i + screen->x + 18, screen->y, (u32)screen->current_directory->start[i], TB_WHITE, TB_BLACK);
+        }
+    }
+    draw_text(NULL, screen->x, screen->y + screen->height);
+    
+    u32 end_y;
+    if(screen->num_lines < screen->view_range_end)
+    {
+        end_y = screen->num_lines;
+    }
+    else
+    {
+        end_y = screen->view_range_end;
+    }
+    
+    for(u32 y = screen->view_range_start; y < end_y; y++)
+    {
+        Line line = screen->buffer[y];
+        // TODO(Luke): Make this robust
+        if(line.is_dir)
+        {
+            u32 end_line = line.text->length + screen->x + tb_width() * (screen->y + y - screen->view_range_start + 1);
+            tb_buffer[end_line].ch = (u32)'/';
+            tb_buffer[end_line].fg = TB_WHITE;
+            tb_buffer[end_line].bg = y == screen->current_line ? TB_BLUE : TB_BLACK;
+        }
+        
+        u32 end_x;
+        if(screen->x + screen->width < line.text->length)
+        {
+            end_x = screen->x + screen->width;
+        }
+        else
+        {
+            end_x = line.text->length;
+        }
+        
+        for(u32 x = 0; x < end_x; x++)
+        {
+            u32 tb_index = screen->x + x + tb_width() * (screen->y + y - screen->view_range_start + 1);
+            tb_buffer[tb_index].ch = (u32)line.text->start[x];
+            tb_buffer[tb_index].fg = TB_WHITE;
+            if(y >= start && y <= end)
+            {
+                tb_buffer[tb_index].bg = TB_BLUE;
+            }
+            else
+            {
+                tb_buffer[tb_index].bg = TB_BLACK;
+            }
+        }
+    }
+    
+    for(u32 i = 0; i < tb_width(); i++)
+    {
+        u32 index = i + tb_width() * (screen->y + screen->height - 1);
+        tb_buffer[index].fg = TB_WHITE | TB_UNDERLINE;
+    }
+    
+    tb_present();
+}
+
 void update_search_screen(SearchBuffer *results)
 {
     struct tb_cell *tb_buffer = tb_cell_buffer();
@@ -764,10 +840,12 @@ int main()
     // Name of new file created. Might move this somewhere else some time
     String *new_file_name = NULL;
     
-    // Temporary operation struct used to test the concept. This will be changed
-    // later when I implement batch operations.
     OperationQueue *op = queue_new(5);
     Operation operation = {};
+
+    u32 visual_select_range_start;
+    u32 visual_select_range_end;
+    b32 new_visual = true;
     
     background(TB_BLACK);
     update_screen(buf);
@@ -853,23 +931,19 @@ int main()
                         operation = dequeue(op);
                         if(operation.type == COPY)
                         {
-                            if(operation.out_path)
-                            {
-                                String *new_out_path = screen->current_directory;
-                                string_replace(operation.out_path, new_out_path->start, new_out_path->length);
-                            }
-                            else
-                            {
-                                operation.out_path = string_copy(screen->current_directory);
-                            }
+                            operation.out_path = string_copy(screen->current_directory);
                             push_directory(operation.in_path, operation.name);
                             push_directory(operation.out_path, operation.name);
                             
                             copy_file(operation.in_path, operation.out_path);
                             
-                            // Reload directory to see the results copy
+                            // Reload directory to see the results of the copy
                             string_cstring(screen->current_directory, global_path, global_path_size);
                             load_directory(global_path, screen);
+
+                            string_free(operation.name);
+                            string_free(operation.in_path);
+                            string_free(operation.out_path);
                         }
                     }
                 }
@@ -882,6 +956,10 @@ int main()
                     global_mode = INSERT;
                 }
                 else if((u8)event.ch == 'v')
+                {
+                    global_mode = VISUAL;
+                }
+                else if((u8)event.ch == 'V')
                 {
                     vertical_split(screen);
                 }
@@ -1039,7 +1117,65 @@ int main()
             
             case VISUAL:
             {
-                
+                if(new_visual)
+                {
+                    visual_select_range_start = screen->current_line;
+                    visual_select_range_end = screen->current_line;
+                    new_visual = false;
+                }
+                if((u8)event.ch == 'j')
+                {
+                    if(visual_select_range_end < screen->num_lines)
+                    {
+                        if(visual_select_range_start == visual_select_range_end) 
+                        {
+                            visual_select_range_end++;
+                            clear_normal_buffer_area(screen);
+                        }
+                        else if(visual_select_range_start == screen->current_line) 
+                        {
+                            visual_select_range_end++;
+                            clear_normal_buffer_area(screen);
+                        }
+                        else 
+                        {
+                            visual_select_range_start++;
+                            clear_normal_buffer_area(screen);
+                        }
+                        
+                        if(visual_select_range_end >= screen->view_range_end) scroll(screen, 1);
+                    }
+                }
+                else if((u8)event.ch == 'k')
+                {
+                    if(visual_select_range_start != 0)
+                    {
+                        if(visual_select_range_end == visual_select_range_start) 
+                        {
+                            visual_select_range_start--;
+                            clear_normal_buffer_area(screen);
+                        }
+                        else if(visual_select_range_start == screen->current_line) 
+                        {
+                            visual_select_range_end--;
+                            clear_normal_buffer_area(screen);
+                        }
+                        else 
+                        {
+                            visual_select_range_start--;
+                            clear_normal_buffer_area(screen);
+                        }
+
+                        if(visual_select_range_start < screen->view_range_start) scroll(screen, -1);
+                    }
+                }
+                else
+                {
+                    new_visual = true;
+                    global_mode = NORMAL;
+                }
+
+                update_visual_screen(screen, visual_select_range_start, visual_select_range_end);
             } break;
         }
     }
