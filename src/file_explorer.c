@@ -992,6 +992,11 @@ int main()
                     global_mode = NORMAL;
                 }
             } break;
+
+            case VISUAL:
+            {
+
+            } break;
         }
     }
     /*
