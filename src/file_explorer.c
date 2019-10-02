@@ -472,7 +472,7 @@ void update_visual_screen(Buffer *screen, u32 start, u32 end)
             u32 tb_index = screen->x + x + tb_width() * (screen->y + y - screen->view_range_start + 1);
             tb_buffer[tb_index].ch = (u32)line.text->start[x];
             tb_buffer[tb_index].fg = TB_WHITE;
-            if(y >= start && y <= end)
+            if(y >= start && y < end)
             {
                 tb_buffer[tb_index].bg = TB_BLUE;
             }
@@ -1120,7 +1120,7 @@ int main()
                 if(new_visual)
                 {
                     visual_select_range_start = screen->current_line;
-                    visual_select_range_end = screen->current_line;
+                    visual_select_range_end = screen->current_line + 1;
                     new_visual = false;
                 }
                 if((u8)event.ch == 'j')
@@ -1148,7 +1148,7 @@ int main()
                 }
                 else if((u8)event.ch == 'k')
                 {
-                    if(visual_select_range_start != 0)
+                    if(visual_select_range_end > 1)
                     {
                         if(visual_select_range_end == visual_select_range_start) 
                         {
