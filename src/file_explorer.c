@@ -3,8 +3,10 @@
 #include <dirent.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 #include "../include/termbox.h"
 #include "../include/strings.h"
@@ -137,6 +139,13 @@ static Mode global_mode;
 static char global_path[256];
 static size_t global_path_size = 256;
 
+
+void panic(const char *error)
+{
+    tb_shutdown();
+    fprintf(stderr, "%s\n", error);
+    exit(1);
+}
 
 OperationQueue *queue_new(u32 capacity)
 {
@@ -1086,7 +1095,7 @@ int main()
                         new_file_name = string_new(20);
                     }
                     string_push(new_file_name, ' ');
-                    draw_text(new_file_name, screen->x, screen->y + 1 + screen-> height);
+                    draw_text(new_file_name, screen->x, screen->y + screen-> height);
                 }
                 else if(event.key == TB_KEY_ENTER)
                 {
@@ -1095,7 +1104,21 @@ int main()
                         push_directory(screen->current_directory, new_file_name);
                         string_cstring(screen->current_directory, global_path, global_path_size);
                         pop_directory(screen->current_directory);
-                        close(open(global_path, O_CREAT|O_EXCL, S_IRUSR + S_IWUSR));
+                        int new_fd = open(global_path, O_CREAT|O_EXCL, S_IRUSR + S_IWUSR);
+                        if(new_fd >= 0)
+                        {
+                            close(new_fd);
+                        }
+                        else
+                        {
+                            //panic(strerror(errno));
+                            String *error = string_from(strerror(errno));
+                            clear_text(screen->x, screen->y + screen->height, new_file_name->length);
+                            draw_text(error, screen->x, screen->y + screen->height);
+                            tb_poll_event(&event);
+                            clear_text(screen->x, screen->y + screen->height, error->length);
+                            string_free(error);
+                        }
                         clear_text(screen->x, screen->y + screen-> height, new_file_name->length);
                         new_file_name->length = 0;
                         string_cstring(screen->current_directory, global_path, global_path_size);
