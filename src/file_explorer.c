@@ -38,10 +38,8 @@ typedef enum
 
 typedef enum
 {
-    DELETE,
     COPY,
     MOVE,
-    NOOP,
 } OperationType;
 
 typedef struct
@@ -90,6 +88,7 @@ typedef struct
     
     u32 current_line;
     u32 num_lines;
+    u32 capacity;
     u32 view_range_start;
     // All Lines before this index are directories
     u32 files_start;
@@ -115,8 +114,9 @@ typedef struct
     u32 query_x;
     u32 query_y;
     
-    i32 current_line;
+    u32 current_line;
     u32 num_lines;
+    u32 capacity;
     u32 view_range_start;
     // view_range_end is one more than the last line with visible text
     // should always be view_range_start + height
@@ -128,6 +128,8 @@ typedef struct
 // Finally doing some forward declarations because caring about the order of the functions is getting annoying
 void draw_text(String*, u32, u32);
 void clear_text(u32, u32, u32);
+void reallocate_buffer(Buffer*);
+void reallocate_search_buffer(SearchBuffer*);
 
 #define MAX_BUFFERS 2
 
@@ -258,6 +260,10 @@ void exec_search(Buffer *screen, SearchBuffer *results, String *query)
                 results->buffer[index].is_dir = screen->buffer[i].is_dir;
                 results->buffer[index].color_mask = color_mask;
                 results->num_lines++;
+                if(results->num_lines >= results->capacity)
+                {
+                    reallocate_search_buffer(results);
+                }
             }
         }
     }
@@ -610,6 +616,11 @@ void load_directory(char *path, Buffer *screen)
     screen->current_line = 0;
     while(dir = readdir(cwd))
     {
+        if(index >= screen->capacity)
+        {
+            reallocate_buffer(screen);
+        }
+        
         if(screen->buffer[index].text == NULL)
         {
             screen->buffer[index].text = string_from(dir->d_name); 
@@ -643,7 +654,21 @@ void load_directory(char *path, Buffer *screen)
     screen->files_start = dir_end;
     
     // Sort directory portion
-    for(u32 i = 0; i < dir_end - 1; i++)
+    // NOTE(Luke): Insertion sort should be faster right? I'll leave bubble sort there just in case
+    for(u32 i = 1; i < dir_end; i++)
+    {
+        Line val = screen->buffer[i];
+        u32 index = i;
+        
+        while(index > 0 && !(string_compare(screen->buffer[index - 1].text, val.text)))
+        {
+            screen->buffer[index] = screen->buffer[index - 1];
+            index--;
+        }
+        screen->buffer[index] = val;
+    }
+    /*
+for(u32 i = 0; i < dir_end - 1; i++)
     {
         for(u32 j = 0; j < dir_end - 1 - i; j++)
         {
@@ -655,20 +680,34 @@ void load_directory(char *path, Buffer *screen)
             }
         }
     }
+*/
     
     // Sort file portion
-    for(u32 i = dir_end; i < length - 1; i++)
+    for(u32 i = dir_end + 1; i < length; i++)
     {
-        for(u32 j = dir_end; j < length - 1 - i + dir_end; j++)
+        Line val = screen->buffer[i];
+        u32 index = i;
+        
+        while(index > dir_end && !(string_compare(screen->buffer[index - 1].text, val.text)))
         {
-            if(!string_compare(screen->buffer[j].text, screen->buffer[j + 1].text))
-            {
-                Line temp = screen->buffer[j];
-                screen->buffer[j] = screen->buffer[j + 1];
-                screen->buffer[j + 1] = temp;
-            }
+            screen->buffer[index] = screen->buffer[index - 1];
+            index--;
         }
+        screen->buffer[index] = val;
     }
+    /*
+    for(u32 i = dir_end; i < length - 1; i++)
+        {
+            for(u32 j = dir_end; j < length - 1 - i + dir_end; j++)
+            {
+                if(!string_compare(screen->buffer[j].text, screen->buffer[j + 1].text))
+                {
+                    Line temp = screen->buffer[j];
+                    screen->buffer[j] = screen->buffer[j + 1];
+                    screen->buffer[j + 1] = temp;
+                }
+            }
+        }*/
 }
 
 void init_buffer(Buffer *buf, u32 x, u32 y, u32 width, u32 height, String *directory)
@@ -682,10 +721,37 @@ void init_buffer(Buffer *buf, u32 x, u32 y, u32 width, u32 height, String *direc
     buf->current_line      = 0;
     buf->current_directory = string_copy(directory);
     buf->buffer            = (Line*)calloc(100, sizeof(Line));
+    buf->capacity          = 100;
     
     // Load buffers current directory
     string_cstring(directory, global_path, global_path_size);
     load_directory(global_path, buf);
+}
+
+void reallocate_buffer(Buffer *buf)
+{
+    Line *new_buffer = calloc(buf->num_lines * 2, sizeof(Line));
+    
+    for(u32 i = 0; i < buf->num_lines; i++)
+    {
+        new_buffer[i] = buf->buffer[i];
+    }
+    free(buf->buffer);
+    buf->capacity *= 2;
+    buf->buffer = new_buffer;
+}
+
+void reallocate_search_buffer(SearchBuffer *buf)
+{
+    Result *new_buffer = calloc(buf->num_lines * 2, sizeof(Result));
+    
+    for(u32 i = 0; i < buf->num_lines; i++)
+    {
+        new_buffer[i] = buf->buffer[i];
+    }
+    free(buf->buffer);
+    buf->capacity *= 2;
+    buf->buffer = new_buffer;
 }
 
 void scroll(Buffer *screen, i32 lines)
@@ -831,6 +897,7 @@ int main()
     Buffer *buf            = (Buffer*)malloc(sizeof(Buffer));
     buf->current_directory = string_from(global_path);
     buf->buffer            = (Line*)calloc(100, sizeof(Line));
+    buf->capacity          = 100;
     buf->x                 = 2;
     buf->y                 = 0;
     buf->width             = tb_width() - 10;
@@ -845,6 +912,7 @@ int main()
     
     SearchBuffer results = {};
     results.buffer = (Result*)calloc(100, sizeof(Result));
+    results.capacity = 100;
     
     // Name of new file created. Might move this somewhere else some time
     String *new_file_name = NULL;
@@ -852,8 +920,8 @@ int main()
     OperationQueue *op = queue_new(5);
     Operation operation = {};
     
-    u32 visual_select_range_start;
-    u32 visual_select_range_end;
+    i32 visual_select_range_start;
+    i32 visual_select_range_end;
     b32 new_visual = true;
     
     background(TB_BLACK);
@@ -925,7 +993,15 @@ int main()
                     string_cstring(screen->current_directory, global_path, global_path_size);
                     load_directory(global_path, screen);
                 }
-                else if((u8)event.ch == 'c')
+                else if((u8)event.ch == 'd')
+                {
+                    operation.type = MOVE;
+                    operation.name = string_copy(screen->buffer[screen->current_line].text);
+                    operation.in_path = string_copy(screen->current_directory);
+                    operation.is_dir = screen->buffer[screen->current_line].is_dir;
+                    enqueue(op, operation);
+                }
+                else if((u8)event.ch == 'y')
                 {
                     operation.type = COPY;
                     operation.name = string_copy(screen->buffer[screen->current_line].text);
@@ -947,6 +1023,21 @@ int main()
                             copy_file(operation.in_path, operation.out_path);
                             
                             // Reload directory to see the results of the copy
+                            string_cstring(screen->current_directory, global_path, global_path_size);
+                            load_directory(global_path, screen);
+                            
+                            string_free(operation.name);
+                            string_free(operation.in_path);
+                            string_free(operation.out_path);
+                        }
+                        else if(operation.type == MOVE)
+                        {
+                            operation.out_path = string_copy(screen->current_directory);
+                            push_directory(operation.in_path, operation.name);
+                            push_directory(operation.out_path, operation.name);
+                            copy_file(operation.in_path, operation.out_path);
+                            string_cstring(operation.in_path, global_path, global_path_size);
+                            unlink(global_path);
                             string_cstring(screen->current_directory, global_path, global_path_size);
                             load_directory(global_path, screen);
                             
@@ -1148,51 +1239,49 @@ int main()
                 }
                 if((u8)event.ch == 'j')
                 {
-                    if(visual_select_range_end < screen->num_lines)
+                    if(!(visual_select_range_start == screen->current_line && visual_select_range_end >= screen->num_lines))
                     {
-                        if(visual_select_range_start == visual_select_range_end) 
+                        if(visual_select_range_start + 1 == visual_select_range_end) 
                         {
                             visual_select_range_end++;
-                            clear_normal_buffer_area(screen);
                         }
                         else if(visual_select_range_start == screen->current_line) 
                         {
                             visual_select_range_end++;
-                            clear_normal_buffer_area(screen);
                         }
                         else 
                         {
                             visual_select_range_start++;
-                            clear_normal_buffer_area(screen);
                         }
+                        clear_normal_buffer_area(screen);
                         
                         if(visual_select_range_end >= screen->view_range_end) scroll(screen, 1);
+                        update_visual_screen(screen, visual_select_range_start, visual_select_range_end);
                     }
                 }
                 else if((u8)event.ch == 'k')
                 {
-                    if(visual_select_range_end > 1)
+                    if(!(visual_select_range_end == screen->current_line + 1 && visual_select_range_start <= 0))
                     {
-                        if(visual_select_range_end == visual_select_range_start) 
+                        if(visual_select_range_end == visual_select_range_start + 1) 
                         {
                             visual_select_range_start--;
-                            clear_normal_buffer_area(screen);
                         }
                         else if(visual_select_range_start == screen->current_line) 
                         {
                             visual_select_range_end--;
-                            clear_normal_buffer_area(screen);
                         }
                         else 
                         {
                             visual_select_range_start--;
-                            clear_normal_buffer_area(screen);
                         }
+                        clear_normal_buffer_area(screen);
                         
                         if(visual_select_range_start < screen->view_range_start) scroll(screen, -1);
+                        update_visual_screen(screen, visual_select_range_start, visual_select_range_end);
                     }
                 }
-                else if((u8)event.ch == 'c')
+                else if((u8)event.ch == 'y')
                 {
                     for(u32 i = visual_select_range_start; i < visual_select_range_end; i++)
                     {
@@ -1204,6 +1293,7 @@ int main()
                     }
                     new_visual = true;
                     global_mode = NORMAL;
+                    update_screen(screen);
                 }
                 else if((u8)event.ch == 'D')
                 {
@@ -1218,14 +1308,15 @@ int main()
                     load_directory(global_path, screen);
                     new_visual = true;
                     global_mode = NORMAL;
+                    update_screen(screen);
                 }
                 else
                 {
                     new_visual = true;
                     global_mode = NORMAL;
+                    clear_normal_buffer_area(screen);
+                    update_screen(screen);
                 }
-                
-                update_visual_screen(screen, visual_select_range_start, visual_select_range_end);
             } break;
         }
     }
