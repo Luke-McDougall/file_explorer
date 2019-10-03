@@ -1123,9 +1123,9 @@ int main()
                         new_file_name->length = 0;
                         string_cstring(screen->current_directory, global_path, global_path_size);
                         load_directory(global_path, screen);
-                        update_screen(screen);
                     }
                     global_mode = NORMAL;
+                    update_screen(screen);
                 }
                 else if(event.key == TB_KEY_ESC)
                 {
