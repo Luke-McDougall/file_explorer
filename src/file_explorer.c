@@ -842,7 +842,7 @@ int main()
     
     OperationQueue *op = queue_new(5);
     Operation operation = {};
-
+    
     u32 visual_select_range_start;
     u32 visual_select_range_end;
     b32 new_visual = true;
@@ -940,7 +940,7 @@ int main()
                             // Reload directory to see the results of the copy
                             string_cstring(screen->current_directory, global_path, global_path_size);
                             load_directory(global_path, screen);
-
+                            
                             string_free(operation.name);
                             string_free(operation.in_path);
                             string_free(operation.out_path);
@@ -1165,16 +1165,43 @@ int main()
                             visual_select_range_start--;
                             clear_normal_buffer_area(screen);
                         }
-
+                        
                         if(visual_select_range_start < screen->view_range_start) scroll(screen, -1);
                     }
+                }
+                else if((u8)event.ch == 'c')
+                {
+                    for(u32 i = visual_select_range_start; i < visual_select_range_end; i++)
+                    {
+                        operation.type = COPY;
+                        operation.name = string_copy(screen->buffer[i].text);
+                        operation.in_path = string_copy(screen->current_directory);
+                        operation.is_dir = screen->buffer[i].is_dir;
+                        enqueue(op, operation);
+                    }
+                    new_visual = true;
+                    global_mode = NORMAL;
+                }
+                else if((u8)event.ch == 'D')
+                {
+                    for(u32 i = visual_select_range_start; i < visual_select_range_end; i++)
+                    {
+                        push_directory(screen->current_directory, screen->buffer[i].text);
+                        string_cstring(screen->current_directory, global_path, global_path_size);
+                        unlink(global_path);
+                        pop_directory(screen->current_directory);
+                    }
+                    string_cstring(screen->current_directory, global_path, global_path_size);
+                    load_directory(global_path, screen);
+                    new_visual = true;
+                    global_mode = NORMAL;
                 }
                 else
                 {
                     new_visual = true;
                     global_mode = NORMAL;
                 }
-
+                
                 update_visual_screen(screen, visual_select_range_start, visual_select_range_end);
             } break;
         }
