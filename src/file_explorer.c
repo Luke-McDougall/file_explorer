@@ -9,8 +9,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "../include/termbox.h"
-#include "../include/strings.h"
-#include "../include/types.h"
+#include "file_explorer.h"
 
 
 // TODO(Luke):
@@ -24,112 +23,6 @@
 
 // Maybe ideas.
 // 1. add an x offset field to Buffer 
-
-
-
-
-typedef enum
-{
-    INSERT,
-    SEARCH,
-    NORMAL,
-    VISUAL,
-} Mode;
-
-typedef enum
-{
-    COPY,
-    MOVE,
-} OperationType;
-
-typedef struct
-{
-    OperationType type;
-    b32 is_dir;
-    
-    String *name;
-    String *in_path;
-    String *out_path;
-} Operation;
-
-typedef struct
-{
-    u32 size;
-    u32 capacity;
-    u32 start;
-    u32 end;
-    Operation *data;
-} OperationQueue;
-
-typedef struct
-{
-    String *text;
-    u8 is_dir;
-} Line;
-
-typedef struct
-{
-    String *text;
-    u32 original_line_number;
-    u8 is_dir;
-    u64 color_mask;
-} Result;
-
-typedef struct 
-{
-    String *current_directory;
-    
-    // x, y coordinates of the top left of the buffer
-    // plus width and height of the buffer.
-    u32 x;
-    u32 y;
-    u32 height;
-    u32 width;
-    
-    u32 current_line;
-    u32 num_lines;
-    u32 capacity;
-    u32 view_range_start;
-    // All Lines before this index are directories
-    u32 files_start;
-    // view_range_end is one more than the last line with visible text
-    // should always be view_range_start + height - 1 because first row is for the title
-    u32 view_range_end;
-    
-    Line *buffer;
-} Buffer;
-
-// NOTE(Luke): Remember this buffer should only contain strings also stored in the main buffer
-// so don't free them twice!
-typedef struct
-{
-    // x, y coordinates of the top left of the buffer
-    // plus width and height of the buffer.
-    u32 x;
-    u32 y;
-    u32 height;
-    u32 width;
-    
-    String *query;
-    u32 query_x;
-    u32 query_y;
-    
-    u32 current_line;
-    u32 num_lines;
-    u32 capacity;
-    u32 view_range_start;
-    // view_range_end is one more than the last line with visible text
-    // should always be view_range_start + height
-    u32 view_range_end;
-    
-    Result *buffer;
-} SearchBuffer;
-
-// Finally doing some forward declarations because caring about the order of the functions is getting annoying
-void draw_text(String*, u32, u32);
-void clear_text(u32, u32, u32);
-void reallocate_buffer(Buffer*);
-void reallocate_search_buffer(SearchBuffer*);
 
 #define MAX_BUFFERS 2
 
@@ -149,50 +42,6 @@ void panic(const char *error)
     exit(1);
 }
 
-OperationQueue *queue_new(u32 capacity)
-{
-    OperationQueue *op = (OperationQueue*)malloc(sizeof(OperationQueue));
-    op->capacity       = capacity;
-    op->size           = 0;
-    op->start          = 0;
-    op->end            = 0;
-    op->data           = (Operation*)calloc(capacity, sizeof(Operation));
-    return op;
-}
-
-Operation dequeue(OperationQueue *op)
-{
-    Operation operation = op->data[op->start];
-    op->start = (op->start + 1) % op->capacity;
-    op->size--;
-    return operation;
-}
-
-void enqueue(OperationQueue *op, Operation operation)
-{
-    if(op->size < op->capacity)
-    {
-        op->data[op->end] = operation;
-        op->end = (op->end + 1) % op->capacity;
-        op->size++;
-    }
-    else
-    {
-        Operation *new_data = (Operation*)calloc(op->capacity * 2, sizeof(Operation));
-        for(u32 i = 0; i < op->size; i++)
-        {
-            u32 index = (i + op->start) % op->capacity;
-            new_data[i] = op->data[index];
-        }
-        new_data[op->size] = operation;
-        free(op->data);
-        op->capacity *= 2;
-        op->size++;
-        op->start = 0;
-        op->end = op->size;
-        op->data = new_data;
-    }
-}
 
 void draw_vertical_line(u32 y_start, u32 y_end, u32 x)
 {
@@ -289,20 +138,18 @@ void exec_search(Buffer *screen, SearchBuffer *results, String *query)
     
     // Sort search results by string length. The idea is that shorter strings are closer matches than long strings
     // with this search system. And there's always more letters that you can add to close in on any longer strings
-    if(results->num_lines > 1)
+    for(u32 i = 1; i < results->num_lines; i++)
     {
-        for(u32 i = 0; i < results->num_lines - 1; i++)
+        Result current = results->buffer[i];
+        u32 current_length = current.text->length;
+        u32 index = i;
+
+        while(index > 0 && results->buffer[index - 1].text->length > current_length)
         {
-            for(u32 j = 0; j < results->num_lines - 1 - i; j++)
-            {
-                if(results->buffer[j].text->length >results->buffer[j + 1].text->length)
-                {
-                    Result temp = results->buffer[j];
-                    results->buffer[j] = results->buffer[j + 1];
-                    results->buffer[j + 1] = temp;
-                }
-            }
+            results->buffer[index] = results->buffer[index - 1];
+            index--;
         }
+        results->buffer[index] = current;
     }
 }
 
@@ -341,11 +188,6 @@ void clear_search_buffer_area(SearchBuffer *results, u32 query_length)
     u32 tb_index = tb_width() * results->query_y;
     
     // Clear query
-    //for(u32 x = results->query_x; x < results->query_x + query_length; x++)
-    //{
-    //    tb_buffer[tb_index + x].ch = (u32)' ';
-    //    tb_buffer[tb_index + x].bg = TB_BLACK;
-    //}
     clear_text(results->query_x, results->query_y, results->query->length);
     
     // Clear rest of buffer
@@ -512,18 +354,6 @@ void update_search_screen(SearchBuffer *results)
     struct tb_cell *tb_buffer = tb_cell_buffer();
     
     // Draw query bar
-    //{
-    //    u32 x = results->query_x;
-    //    u32 y = results->query_y;
-    //    u32 length = results->query->length;
-    //    for(u32 i = 0; i < length; i++)
-    //    {
-    //        u32 tb_index = x + i + tb_width() * y;
-    //        tb_buffer[tb_index].ch = (u32)results->query->start[i];
-    //        tb_buffer[tb_index].fg = TB_WHITE;
-    //        tb_buffer[tb_index].bg = TB_BLACK;
-    //    }
-    //}
     draw_text(results->query, results->query_x, results->query_y);
     
     u32 end;
@@ -654,7 +484,6 @@ void load_directory(char *path, Buffer *screen)
     screen->files_start = dir_end;
     
     // Sort directory portion
-    // NOTE(Luke): Insertion sort should be faster right? I'll leave bubble sort there just in case
     for(u32 i = 1; i < dir_end; i++)
     {
         Line val = screen->buffer[i];
@@ -667,20 +496,6 @@ void load_directory(char *path, Buffer *screen)
         }
         screen->buffer[index] = val;
     }
-    /*
-for(u32 i = 0; i < dir_end - 1; i++)
-    {
-        for(u32 j = 0; j < dir_end - 1 - i; j++)
-        {
-            if(!string_compare(screen->buffer[j].text, screen->buffer[j + 1].text))
-            {
-                Line temp = screen->buffer[j];
-                screen->buffer[j] = screen->buffer[j + 1];
-                screen->buffer[j + 1] = temp;
-            }
-        }
-    }
-*/
     
     // Sort file portion
     for(u32 i = dir_end + 1; i < length; i++)
@@ -695,19 +510,6 @@ for(u32 i = 0; i < dir_end - 1; i++)
         }
         screen->buffer[index] = val;
     }
-    /*
-    for(u32 i = dir_end; i < length - 1; i++)
-        {
-            for(u32 j = dir_end; j < length - 1 - i + dir_end; j++)
-            {
-                if(!string_compare(screen->buffer[j].text, screen->buffer[j + 1].text))
-                {
-                    Line temp = screen->buffer[j];
-                    screen->buffer[j] = screen->buffer[j + 1];
-                    screen->buffer[j + 1] = temp;
-                }
-            }
-        }*/
 }
 
 void init_buffer(Buffer *buf, u32 x, u32 y, u32 width, u32 height, String *directory)
