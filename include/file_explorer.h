@@ -1,5 +1,5 @@
-#include "../include/types.h"
-#include "../include/strings.h"
+#include "types.h"
+#include "strings.h"
 
 typedef enum
 {
