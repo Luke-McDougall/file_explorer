@@ -9,7 +9,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "../include/termbox.h"
-#include "file_explorer.h"
+#include "../include/file_explorer.h"
 
 
 // TODO(Luke):
