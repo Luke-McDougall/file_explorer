@@ -63,9 +63,8 @@ int
 string_contains(String *str, const char *literal)
 {
     int l_length = 0;
-    // Determine length of literal, we don't use strlen in this house
     while(literal[l_length] != '\0') {l_length++;}
-    if(l_length == 0) {return 0;}
+    if(l_length == 0) return 0;
 
     for(int i = 0; i < str->length; i++)
     {
@@ -76,17 +75,29 @@ string_contains(String *str, const char *literal)
             // If l_length is 1 then we know str contains literal
             // this also avoids SEGFAULTS or weird behaviour in 
             // the while loop
-            if(l_length == 1) {return 1;}
+            if(l_length == 1) return 1;
 
             int l_idx = 1;
             while(str->start[i + l_idx] == literal[l_idx])
             {
                 l_idx++;
-                if(l_idx >= l_length) {return 1;}
+                if(l_idx >= l_length) return 1;
             }
         }
     }
     return 0;
+}
+
+int
+string_equals(String *str1, String *str2)
+{
+    if(str1->length != str2->length) return 0;
+
+    for(int i = 0; i < str1->length; i++)
+    {
+        if(str1->start[i] != str2->start[i]) return 0;
+    }
+    return 1;
 }
 
 void
@@ -95,7 +106,7 @@ string_to_lowercase(String *str)
     for(int i = 0; i < str->length; i++)
     {
         char c = str->start[i];
-        if(c >= 'A' && c <= 'Z') {str->start[i] += 32;}
+        if(c >= 'A' && c <= 'Z') str->start[i] += 32;
     }
 }
 

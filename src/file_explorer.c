@@ -22,7 +22,7 @@
 
 
 // Maybe ideas.
-// 1. add an x offset field to Buffer 
+// 1. add an x offset field to Buffer
 
 #define MAX_BUFFERS 2
 
@@ -143,7 +143,7 @@ void exec_search(Buffer *screen, SearchBuffer *results, String *query)
         Result current = results->buffer[i];
         u32 current_length = current.text->length;
         u32 index = i;
-
+        
         while(index > 0 && results->buffer[index - 1].text->length > current_length)
         {
             results->buffer[index] = results->buffer[index - 1];
@@ -357,7 +357,7 @@ void update_search_screen(SearchBuffer *results)
     draw_text(results->query, results->query_x, results->query_y);
     
     u32 end;
-    if(results->num_lines < results->view_range_end) 
+    if(results->num_lines < results->view_range_end)
     {
         end = results->num_lines;
     }
@@ -453,7 +453,7 @@ void load_directory(char *path, Buffer *screen)
         
         if(screen->buffer[index].text == NULL)
         {
-            screen->buffer[index].text = string_from(dir->d_name); 
+            screen->buffer[index].text = string_from(dir->d_name);
         }
         else
         {
@@ -682,11 +682,18 @@ void copy_file(String *src_file, String *dst_file)
     string_cstring(dst_file, global_path, global_path_size);
     
     // O_CREAT|O_EXCL ensure a new file is created and S_IRUSR + S_IWUSR sets read and write permissions for the user
-    int fd_out = open(global_path, O_WRONLY|O_CREAT|O_EXCL, S_IRUSR + S_IWUSR); 
+    int fd_out = open(global_path, O_WRONLY|O_CREAT|O_EXCL, S_IRUSR + S_IWUSR);
     
     copy_file_range(fd_in, NULL, fd_out, NULL, length, 0);
     close(fd_in);
     close(fd_out);
+}
+
+void delete_file(String *filename)
+{
+    string_cstring(filename, global_path, global_path_size);
+
+    if(unlink(global_path) < 0) panic(strerror(errno));
 }
 
 int main()
@@ -741,7 +748,7 @@ int main()
                 {
                     screen->current_line = (screen->current_line + 1) % screen->num_lines;
                     if(screen->current_line >= screen->view_range_end) scroll(screen, 1);
-                    if(screen->current_line == 0) 
+                    if(screen->current_line == 0)
                     {
                         clear_normal_buffer_area(screen);
                         jump_to_line(screen, 0);
@@ -789,11 +796,11 @@ int main()
                 else if((u8)event.ch == 'D')
                 {
                     push_directory(screen->current_directory, screen->buffer[screen->current_line].text);
-                    string_cstring(screen->current_directory, global_path, global_path_size);
-                    unlink(global_path);
+                    delete_file(screen->current_directory);
                     pop_directory(screen->current_directory);
                     string_cstring(screen->current_directory, global_path, global_path_size);
                     load_directory(global_path, screen);
+                    update_screen(screen);
                 }
                 else if((u8)event.ch == 'd')
                 {
@@ -838,10 +845,24 @@ int main()
                             push_directory(operation.in_path, operation.name);
                             push_directory(operation.out_path, operation.name);
                             copy_file(operation.in_path, operation.out_path);
-                            string_cstring(operation.in_path, global_path, global_path_size);
-                            unlink(global_path);
+                            delete_file(operation.in_path);
                             string_cstring(screen->current_directory, global_path, global_path_size);
                             load_directory(global_path, screen);
+
+                            // Reload directory of moved file if it is open in a buffer
+                            pop_directory(operation.in_path);
+                            if(string_equals(operation.in_path, global_state_buffers[0]->current_directory))
+                            {
+                                string_cstring(operation.in_path, global_path, global_path_size);
+                                load_directory(global_path, global_state_buffers[0]);
+                                update_screen(global_state_buffers[0]);
+                            }
+                            if(string_equals(operation.in_path, global_state_buffers[1]->current_directory))
+                            {
+                                string_cstring(operation.in_path, global_path, global_path_size);
+                                load_directory(global_path, global_state_buffers[1]);
+                                update_screen(global_state_buffers[1]);
+                            }
                             
                             string_free(operation.name);
                             string_free(operation.in_path);
@@ -920,7 +941,7 @@ int main()
                 else if(event.key == TB_KEY_TAB)
                 {
                     results.current_line = (results.current_line + 1) % results.num_lines;
-                    if(results.current_line >= results.view_range_end) 
+                    if(results.current_line >= results.view_range_end)
                     {
                         // search_scroll calls clear_search_buffer_area()
                         search_scroll(&results);
@@ -1043,15 +1064,15 @@ int main()
                 {
                     if(!(visual_select_range_start == screen->current_line && visual_select_range_end >= screen->num_lines))
                     {
-                        if(visual_select_range_start + 1 == visual_select_range_end) 
+                        if(visual_select_range_start + 1 == visual_select_range_end)
                         {
                             visual_select_range_end++;
                         }
-                        else if(visual_select_range_start == screen->current_line) 
+                        else if(visual_select_range_start == screen->current_line)
                         {
                             visual_select_range_end++;
                         }
-                        else 
+                        else
                         {
                             visual_select_range_start++;
                         }
@@ -1065,15 +1086,15 @@ int main()
                 {
                     if(!(visual_select_range_end == screen->current_line + 1 && visual_select_range_start <= 0))
                     {
-                        if(visual_select_range_end == visual_select_range_start + 1) 
+                        if(visual_select_range_end == visual_select_range_start + 1)
                         {
                             visual_select_range_start--;
                         }
-                        else if(visual_select_range_start == screen->current_line) 
+                        else if(visual_select_range_start == screen->current_line)
                         {
                             visual_select_range_end--;
                         }
-                        else 
+                        else
                         {
                             visual_select_range_start--;
                         }
