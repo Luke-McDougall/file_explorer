@@ -1,5 +1,6 @@
 #include "types.h"
 #include "strings.h"
+#include <stdlib.h>
 
 typedef enum
 {
@@ -19,7 +20,7 @@ typedef struct
 {
     OperationType type;
     b32 is_dir;
-    
+
     String *name;
     String *in_path;
     String *out_path;
@@ -48,17 +49,17 @@ typedef struct
     u64 color_mask;
 } Result;
 
-typedef struct 
+typedef struct
 {
     String *current_directory;
-    
+
     // x, y coordinates of the top left of the buffer
     // plus width and height of the buffer.
     u32 x;
     u32 y;
     u32 height;
     u32 width;
-    
+
     u32 current_line;
     u32 num_lines;
     u32 capacity;
@@ -68,7 +69,7 @@ typedef struct
     // view_range_end is one more than the last line with visible text
     // should always be view_range_start + height - 1 because first row is for the title
     u32 view_range_end;
-    
+
     Line *buffer;
 } Buffer;
 
@@ -82,11 +83,11 @@ typedef struct
     u32 y;
     u32 height;
     u32 width;
-    
+
     String *query;
     u32 query_x;
     u32 query_y;
-    
+
     u32 current_line;
     u32 num_lines;
     u32 capacity;
@@ -94,7 +95,7 @@ typedef struct
     // view_range_end is one more than the last line with visible text
     // should always be view_range_start + height
     u32 view_range_end;
-    
+
     Result *buffer;
 } SearchBuffer;
 

@@ -1,4 +1,7 @@
 #include "types.h"
+
+#ifndef STRINGS
+#define STRINGS
 typedef struct
 {
     char *start;
@@ -21,3 +24,4 @@ void string_push_str(String*, char*, size_t);
 void string_pop(String*);
 void string_print(String*);
 void string_free(String*);
+#endif

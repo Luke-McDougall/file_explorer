@@ -25,6 +25,7 @@
 // 1. add an x offset field to Buffer
 
 #define MAX_BUFFERS 2
+#define TEXT_OFF 7
 
 static u32 global_state_active_buffer;
 static u32 global_state_num_buffers;
@@ -33,7 +34,6 @@ static Buffer **global_state_buffers;
 static Mode global_mode;
 static char global_path[256];
 static size_t global_path_size = 256;
-
 
 void panic(const char *error)
 {
@@ -116,7 +116,7 @@ void exec_search(Buffer *screen, SearchBuffer *results, String *query)
             }
         }
     }
-    
+
     u32 max_height            = screen->height / 4;
     results->view_range_start = 0;
     results->current_line     = 0;
@@ -135,7 +135,7 @@ void exec_search(Buffer *screen, SearchBuffer *results, String *query)
         results->y = screen->y + screen->height - results->num_lines;
     }
     results->view_range_end = results->height;
-    
+
     // Sort search results by string length. The idea is that shorter strings are closer matches than long strings
     // with this search system. And there's always more letters that you can add to close in on any longer strings
     for(u32 i = 1; i < results->num_lines; i++)
@@ -143,7 +143,7 @@ void exec_search(Buffer *screen, SearchBuffer *results, String *query)
         Result current = results->buffer[i];
         u32 current_length = current.text->length;
         u32 index = i;
-        
+
         while(index > 0 && results->buffer[index - 1].text->length > current_length)
         {
             results->buffer[index] = results->buffer[index - 1];
@@ -168,7 +168,7 @@ void background(u16 bg)
 void clear_normal_buffer_area(Buffer *screen)
 {
     struct tb_cell *tb_buffer = tb_cell_buffer();
-    
+
     for(u32 y = screen->y; y < screen->y + screen->height; y++)
     {
         for(u32 x = screen->x; x < screen->x + screen->width; x++)
@@ -186,10 +186,10 @@ void clear_search_buffer_area(SearchBuffer *results, u32 query_length)
 {
     struct tb_cell *tb_buffer = tb_cell_buffer();
     u32 tb_index = tb_width() * results->query_y;
-    
+
     // Clear query
-    clear_text(results->query_x, results->query_y, results->query->length);
-    
+    clear_text(results->query_x, results->query_y, query_length);
+
     // Clear rest of buffer
     tb_index = tb_width() * results->y;
     for(u32 y = results->y; y < results->y + results->height; y++)
@@ -207,11 +207,11 @@ void clear_search_buffer_area(SearchBuffer *results, u32 query_length)
 void update_screen(Buffer *screen)
 {
     struct tb_cell *tb_buffer = tb_cell_buffer();
-    
+
     // Draw title
     {
         static char title[19] = "Current Directory:";
-        
+
         for(u32 i = 0; i < 18; i++)
         {
             tb_change_cell(i + screen->x, screen->y, (u32)title[i], TB_WHITE, TB_BLACK);
@@ -222,7 +222,7 @@ void update_screen(Buffer *screen)
         }
     }
     draw_text(NULL, screen->x, screen->y + screen->height);
-    
+
     u32 end_y;
     if(screen->num_lines < screen->view_range_end)
     {
@@ -232,7 +232,7 @@ void update_screen(Buffer *screen)
     {
         end_y = screen->view_range_end;
     }
-    
+
     for(u32 y = screen->view_range_start; y < end_y; y++)
     {
         Line line = screen->buffer[y];
@@ -244,7 +244,7 @@ void update_screen(Buffer *screen)
             tb_buffer[end_line].fg = TB_WHITE;
             tb_buffer[end_line].bg = y == screen->current_line ? TB_BLUE : TB_BLACK;
         }
-        
+
         u32 end_x;
         if(screen->x + screen->width < line.text->length)
         {
@@ -254,7 +254,7 @@ void update_screen(Buffer *screen)
         {
             end_x = line.text->length;
         }
-        
+
         for(u32 x = 0; x < end_x; x++)
         {
             u32 tb_index = screen->x + x + tb_width() * (screen->y + y - screen->view_range_start + 1);
@@ -263,24 +263,24 @@ void update_screen(Buffer *screen)
             tb_buffer[tb_index].bg = y == screen->current_line ? TB_BLUE : TB_BLACK;
         }
     }
-    
+
     for(u32 i = 0; i < tb_width(); i++)
     {
         u32 index = i + tb_width() * (screen->y + screen->height - 1);
         tb_buffer[index].fg = TB_WHITE | TB_UNDERLINE;
     }
-    
+
     tb_present();
 }
 
 void update_visual_screen(Buffer *screen, u32 start, u32 end)
 {
     struct tb_cell *tb_buffer = tb_cell_buffer();
-    
+
     // Draw title
     {
         static char title[19] = "Current Directory:";
-        
+
         for(u32 i = 0; i < 18; i++)
         {
             tb_change_cell(i + screen->x, screen->y, (u32)title[i], TB_WHITE, TB_BLACK);
@@ -291,7 +291,7 @@ void update_visual_screen(Buffer *screen, u32 start, u32 end)
         }
     }
     draw_text(NULL, screen->x, screen->y + screen->height);
-    
+
     u32 end_y;
     if(screen->num_lines < screen->view_range_end)
     {
@@ -301,7 +301,7 @@ void update_visual_screen(Buffer *screen, u32 start, u32 end)
     {
         end_y = screen->view_range_end;
     }
-    
+
     for(u32 y = screen->view_range_start; y < end_y; y++)
     {
         Line line = screen->buffer[y];
@@ -313,7 +313,7 @@ void update_visual_screen(Buffer *screen, u32 start, u32 end)
             tb_buffer[end_line].fg = TB_WHITE;
             tb_buffer[end_line].bg = y == screen->current_line ? TB_BLUE : TB_BLACK;
         }
-        
+
         u32 end_x;
         if(screen->x + screen->width < line.text->length)
         {
@@ -323,7 +323,7 @@ void update_visual_screen(Buffer *screen, u32 start, u32 end)
         {
             end_x = line.text->length;
         }
-        
+
         for(u32 x = 0; x < end_x; x++)
         {
             u32 tb_index = screen->x + x + tb_width() * (screen->y + y - screen->view_range_start + 1);
@@ -339,23 +339,23 @@ void update_visual_screen(Buffer *screen, u32 start, u32 end)
             }
         }
     }
-    
+
     for(u32 i = 0; i < tb_width(); i++)
     {
         u32 index = i + tb_width() * (screen->y + screen->height - 1);
         tb_buffer[index].fg = TB_WHITE | TB_UNDERLINE;
     }
-    
+
     tb_present();
 }
 
 void update_search_screen(SearchBuffer *results)
 {
     struct tb_cell *tb_buffer = tb_cell_buffer();
-    
+
     // Draw query bar
     draw_text(results->query, results->query_x, results->query_y);
-    
+
     u32 end;
     if(results->num_lines < results->view_range_end)
     {
@@ -365,7 +365,7 @@ void update_search_screen(SearchBuffer *results)
     {
         end = results->view_range_end;
     }
-    
+
     for(u32 y = results->view_range_start; y < end; y++)
     {
         Result line = results->buffer[y];
@@ -377,7 +377,7 @@ void update_search_screen(SearchBuffer *results)
             tb_buffer[end_line].fg = TB_WHITE;
             tb_buffer[end_line].bg = y == results->current_line ? TB_BLUE : TB_BLACK;
         }
-        
+
         u16 bg = y == results->current_line ? TB_MAGENTA : TB_WHITE;
         for(u32 x = 0; x < line.text->length; x++)
         {
@@ -419,7 +419,7 @@ int pop_directory(String *path)
 {
     i32 index = (i32)(path->length - 1);
     char c;
-    
+
     while(index >= 0)
     {
         c = path->start[index];
@@ -450,7 +450,7 @@ void load_directory(char *path, Buffer *screen)
         {
             reallocate_buffer(screen);
         }
-        
+
         if(screen->buffer[index].text == NULL)
         {
             screen->buffer[index].text = string_from(dir->d_name);
@@ -464,10 +464,10 @@ void load_directory(char *path, Buffer *screen)
         screen->num_lines++;
     }
     closedir(cwd);
-    
+
     screen->view_range_end = screen->height - 1;
     screen->view_range_start = 0;
-    
+
     // Segregate directories and regular files
     u32 dir_end = 0;
     u32 length = screen->num_lines;
@@ -482,13 +482,13 @@ void load_directory(char *path, Buffer *screen)
         }
     }
     screen->files_start = dir_end;
-    
+
     // Sort directory portion
     for(u32 i = 1; i < dir_end; i++)
     {
         Line val = screen->buffer[i];
         u32 index = i;
-        
+
         while(index > 0 && !(string_compare(screen->buffer[index - 1].text, val.text)))
         {
             screen->buffer[index] = screen->buffer[index - 1];
@@ -496,13 +496,13 @@ void load_directory(char *path, Buffer *screen)
         }
         screen->buffer[index] = val;
     }
-    
+
     // Sort file portion
     for(u32 i = dir_end + 1; i < length; i++)
     {
         Line val = screen->buffer[i];
         u32 index = i;
-        
+
         while(index > dir_end && !(string_compare(screen->buffer[index - 1].text, val.text)))
         {
             screen->buffer[index] = screen->buffer[index - 1];
@@ -524,7 +524,7 @@ void init_buffer(Buffer *buf, u32 x, u32 y, u32 width, u32 height, String *direc
     buf->current_directory = string_copy(directory);
     buf->buffer            = (Line*)calloc(100, sizeof(Line));
     buf->capacity          = 100;
-    
+
     // Load buffers current directory
     string_cstring(directory, global_path, global_path_size);
     load_directory(global_path, buf);
@@ -533,7 +533,7 @@ void init_buffer(Buffer *buf, u32 x, u32 y, u32 width, u32 height, String *direc
 void reallocate_buffer(Buffer *buf)
 {
     Line *new_buffer = calloc(buf->num_lines * 2, sizeof(Line));
-    
+
     for(u32 i = 0; i < buf->num_lines; i++)
     {
         new_buffer[i] = buf->buffer[i];
@@ -546,7 +546,7 @@ void reallocate_buffer(Buffer *buf)
 void reallocate_search_buffer(SearchBuffer *buf)
 {
     Result *new_buffer = calloc(buf->num_lines * 2, sizeof(Result));
-    
+
     for(u32 i = 0; i < buf->num_lines; i++)
     {
         new_buffer[i] = buf->buffer[i];
@@ -571,7 +571,7 @@ void scroll(Buffer *screen, i32 lines)
 void jump_to_line(Buffer *screen, u32 line_number)
 {
     screen->current_line = line_number;
-    
+
     if(screen->current_line < screen->view_range_start)
     {
         i32 diff = screen->current_line - screen->view_range_start;
@@ -596,53 +596,51 @@ void draw_text(String *text, u32 x, u32 y)
 {
     char *mode;
     u16 bg;
-    const u32 text_off = 7;
-    
+
     switch(global_mode)
     {
         case NORMAL:
         mode = "NORMAL";
         bg = TB_BLUE;
         break;
-        
+
         case SEARCH:
         mode = "SEARCH";
         bg = TB_MAGENTA;
         break;
-        
+
         case INSERT:
         mode = "INSERT";
         bg = TB_GREEN;
         break;
-        
+
         case VISUAL:
         mode = "VISUAL";
         bg = TB_YELLOW;
         break;
     }
-    
-    for(u32 i = 0; i < text_off - 1; i++)
+
+    for(u32 i = 0; i < TEXT_OFF - 1; i++)
     {
         tb_change_cell(x + i, y, (u32)mode[i], TB_BLACK, bg);
     }
-    
+
     if(text)
     {
         for(u32 i = 0; i < text->length; i++)
         {
-            tb_change_cell(x + i + text_off, y, (u32)text->start[i], TB_WHITE, TB_BLACK);
+            tb_change_cell(x + i + TEXT_OFF, y, (u32)text->start[i], TB_WHITE, TB_BLACK);
         }
     }
-    
+
     tb_present();
 }
 
 void clear_text(u32 x, u32 y, u32 length)
 {
-    const u32 text_off = 7;
     for(u32 i = 0; i < length; i++)
     {
-        tb_change_cell(x + i + text_off, y, (u32)' ', TB_WHITE, TB_BLACK);
+        tb_change_cell(x + i + TEXT_OFF, y, (u32)' ', TB_WHITE, TB_BLACK);
     }
     tb_present();
 }
@@ -655,14 +653,14 @@ void vertical_split(Buffer *buffer)
         u32 buffer_height = buffer->height;
         u32 x_off = buffer->x;
         u32 y_off = buffer->y;
-        
+
         buffer->width = buffer_width;
-        
+
         Buffer *buffer2 = (Buffer*)malloc(sizeof(Buffer));
-        
+
         init_buffer(buffer2, x_off * 2 + buffer_width, y_off, buffer_width, buffer_height, buffer->current_directory);
         global_state_buffers[global_state_num_buffers++] = buffer2;
-        
+
         update_screen(buffer);
         update_screen(buffer2);
         draw_vertical_line(0, tb_height(), buffer->x + buffer->width);
@@ -676,14 +674,14 @@ void copy_file(String *src_file, String *dst_file)
     struct stat statbuf;
     stat(global_path, &statbuf);
     size_t length = statbuf.st_size;
-    
+
     int fd_in = open(global_path, O_RDONLY);
-    
+
     string_cstring(dst_file, global_path, global_path_size);
-    
+
     // O_CREAT|O_EXCL ensure a new file is created and S_IRUSR + S_IWUSR sets read and write permissions for the user
     int fd_out = open(global_path, O_WRONLY|O_CREAT|O_EXCL, S_IRUSR + S_IWUSR);
-    
+
     copy_file_range(fd_in, NULL, fd_out, NULL, length, 0);
     close(fd_in);
     close(fd_out);
@@ -696,13 +694,22 @@ void delete_file(String *filename)
     if(unlink(global_path) < 0) panic(strerror(errno));
 }
 
+void rename_file(String *filename, String *new_filename)
+{
+    char oldname[256];
+    char newname[256];
+    string_cstring(filename, oldname, 256);
+    string_cstring(new_filename, newname, 256);
+    rename(oldname, newname);
+}
+
 int main()
 {
     tb_init();
     global_mode = NORMAL;
     struct tb_event event = {};
     getcwd(global_path, global_path_size);
-    
+
     Buffer *buf            = (Buffer*)malloc(sizeof(Buffer));
     buf->current_directory = string_from(global_path);
     buf->buffer            = (Line*)calloc(100, sizeof(Line));
@@ -711,28 +718,28 @@ int main()
     buf->y                 = 0;
     buf->width             = tb_width() - 10;
     buf->height            = tb_height() - 1;
-    
+
     load_directory(global_path, buf);
-    
+
     global_state_buffers       = (Buffer**)malloc(sizeof(Buffer*) * MAX_BUFFERS);
     global_state_num_buffers   = 1;
     global_state_active_buffer = 0;
     global_state_buffers[0]    = buf;
-    
+
     SearchBuffer results = {};
     results.buffer = (Result*)calloc(100, sizeof(Result));
     results.capacity = 100;
-    
+
     // Name of new file created. Might move this somewhere else some time
     String *new_file_name = NULL;
-    
+
     OperationQueue *op = queue_new(5);
     Operation operation = {};
-    
-    i32 visual_select_range_start;
-    i32 visual_select_range_end;
+
+    u32 visual_select_range_start;
+    u32 visual_select_range_end;
     b32 new_visual = true;
-    
+
     background(TB_BLACK);
     update_screen(buf);
     Buffer *screen = global_state_buffers[0];
@@ -828,13 +835,13 @@ int main()
                             operation.out_path = string_copy(screen->current_directory);
                             push_directory(operation.in_path, operation.name);
                             push_directory(operation.out_path, operation.name);
-                            
+
                             copy_file(operation.in_path, operation.out_path);
-                            
+
                             // Reload directory to see the results of the copy
                             string_cstring(screen->current_directory, global_path, global_path_size);
                             load_directory(global_path, screen);
-                            
+
                             string_free(operation.name);
                             string_free(operation.in_path);
                             string_free(operation.out_path);
@@ -863,7 +870,7 @@ int main()
                                 load_directory(global_path, global_state_buffers[1]);
                                 update_screen(global_state_buffers[1]);
                             }
-                            
+
                             string_free(operation.name);
                             string_free(operation.in_path);
                             string_free(operation.out_path);
@@ -897,7 +904,7 @@ int main()
                 }
                 update_screen(screen);
             } break;
-            
+
             case SEARCH:
             {
                 // 0x21 - 0x7E is the range of valid ascii character codes that can be added to the query
@@ -909,11 +916,11 @@ int main()
                     }
                     string_push(results.query, (u8)event.ch);
                     exec_search(screen, &results, results.query);
-                    
+
                     // NOTE(Luke): Clearing the search buffer before executing the search was causing a bug
                     // that cleared the previous position on the screen instead of the updated one. Keep things
                     // like this in mind in the future with multiple buffers!!!
-                    
+
                     clear_search_buffer_area(&results, 0);
                     draw_search_overlay(screen, &results);
                 }
@@ -984,7 +991,7 @@ int main()
                     update_screen(screen);
                 }
             } break;
-            
+
             case INSERT:
             {
                 if((u8)event.ch >= 0x21 && (u8)event.ch <= 0x7E)
@@ -999,7 +1006,7 @@ int main()
                 else if(event.key == TB_KEY_BACKSPACE || event.key == TB_KEY_BACKSPACE2)
                 {
                     new_file_name->length--;
-                    tb_change_cell(screen->x + new_file_name->length, screen->y + screen-> height, (u32)' ', TB_BLACK, TB_BLACK);
+                    tb_change_cell(screen->x + new_file_name->length + TEXT_OFF, screen->y + screen-> height, (u32)' ', TB_BLACK, TB_BLACK);
                     tb_present();
                 }
                 else if(event.key == TB_KEY_SPACE)
@@ -1051,7 +1058,7 @@ int main()
                     global_mode = NORMAL;
                 }
             } break;
-            
+
             case VISUAL:
             {
                 if(new_visual)
@@ -1077,7 +1084,7 @@ int main()
                             visual_select_range_start++;
                         }
                         clear_normal_buffer_area(screen);
-                        
+
                         if(visual_select_range_end >= screen->view_range_end) scroll(screen, 1);
                         update_visual_screen(screen, visual_select_range_start, visual_select_range_end);
                     }
@@ -1099,7 +1106,7 @@ int main()
                             visual_select_range_start--;
                         }
                         clear_normal_buffer_area(screen);
-                        
+
                         if(visual_select_range_start < screen->view_range_start) scroll(screen, -1);
                         update_visual_screen(screen, visual_select_range_start, visual_select_range_end);
                     }
