@@ -27,6 +27,9 @@
 #define MAX_BUFFERS 2
 #define TEXT_OFF 7
 
+static u32 global_terminal_width;
+static u32 global_terminal_height;
+
 static u32 global_state_active_buffer;
 static u32 global_state_num_buffers;
 static Buffer **global_state_buffers;
@@ -156,7 +159,7 @@ void exec_search(Buffer *screen, SearchBuffer *results, String *query)
 void background(u16 bg)
 {
     struct tb_cell *tb_buffer = tb_cell_buffer();
-    u32 length = tb_width() * tb_height();
+    u32 length = global_terminal_width * global_terminal_height;
     for(u32 i = 0; i < length; i++)
     {
         tb_buffer[i].ch = (u32)' ';
@@ -173,7 +176,7 @@ void clear_normal_buffer_area(Buffer *screen)
     {
         for(u32 x = screen->x; x < screen->x + screen->width; x++)
         {
-            u32 tb_index = x + tb_width() * y;
+            u32 tb_index = x + global_terminal_width * y;
             tb_buffer[tb_index].ch = (u32)' ';
             tb_buffer[tb_index].bg = TB_BLACK;
         }
@@ -185,13 +188,13 @@ void clear_normal_buffer_area(Buffer *screen)
 void clear_search_buffer_area(SearchBuffer *results, u32 query_length)
 {
     struct tb_cell *tb_buffer = tb_cell_buffer();
-    u32 tb_index = tb_width() * results->query_y;
+    u32 tb_index = global_terminal_width * results->query_y;
 
     // Clear query
     clear_text(results->query_x, results->query_y, query_length);
 
     // Clear rest of buffer
-    tb_index = tb_width() * results->y;
+    tb_index = global_terminal_width * results->y;
     for(u32 y = results->y; y < results->y + results->height; y++)
     {
         for(u32 x = results->x; x < results->x + results->width; x++)
@@ -199,7 +202,7 @@ void clear_search_buffer_area(SearchBuffer *results, u32 query_length)
             tb_buffer[tb_index + x].ch = (u32)' ';
             tb_buffer[tb_index + x].bg = TB_BLACK;
         }
-        tb_index += tb_width();
+        tb_index += global_terminal_width;
     }
     tb_present();
 }
@@ -239,7 +242,7 @@ void update_screen(Buffer *screen)
         // TODO(Luke): Make this robust
         if(line.is_dir)
         {
-            u32 end_line = line.text->length + screen->x + tb_width() * (screen->y + y - screen->view_range_start + 1);
+            u32 end_line = line.text->length + screen->x + global_terminal_width * (screen->y + y - screen->view_range_start + 1);
             tb_buffer[end_line].ch = (u32)'/';
             tb_buffer[end_line].fg = TB_WHITE;
             tb_buffer[end_line].bg = y == screen->current_line ? TB_BLUE : TB_BLACK;
@@ -257,16 +260,16 @@ void update_screen(Buffer *screen)
 
         for(u32 x = 0; x < end_x; x++)
         {
-            u32 tb_index = screen->x + x + tb_width() * (screen->y + y - screen->view_range_start + 1);
+            u32 tb_index = screen->x + x + global_terminal_width * (screen->y + y - screen->view_range_start + 1);
             tb_buffer[tb_index].ch = (u32)line.text->start[x];
             tb_buffer[tb_index].fg = TB_WHITE;
             tb_buffer[tb_index].bg = y == screen->current_line ? TB_BLUE : TB_BLACK;
         }
     }
 
-    for(u32 i = 0; i < tb_width(); i++)
+    for(u32 i = 0; i < global_terminal_width; i++)
     {
-        u32 index = i + tb_width() * (screen->y + screen->height - 1);
+        u32 index = i + global_terminal_width * (screen->y + screen->height - 1);
         tb_buffer[index].fg = TB_WHITE | TB_UNDERLINE;
     }
 
@@ -308,7 +311,7 @@ void update_visual_screen(Buffer *screen, u32 start, u32 end)
         // TODO(Luke): Make this robust
         if(line.is_dir)
         {
-            u32 end_line = line.text->length + screen->x + tb_width() * (screen->y + y - screen->view_range_start + 1);
+            u32 end_line = line.text->length + screen->x + global_terminal_width * (screen->y + y - screen->view_range_start + 1);
             tb_buffer[end_line].ch = (u32)'/';
             tb_buffer[end_line].fg = TB_WHITE;
             tb_buffer[end_line].bg = y == screen->current_line ? TB_BLUE : TB_BLACK;
@@ -326,7 +329,7 @@ void update_visual_screen(Buffer *screen, u32 start, u32 end)
 
         for(u32 x = 0; x < end_x; x++)
         {
-            u32 tb_index = screen->x + x + tb_width() * (screen->y + y - screen->view_range_start + 1);
+            u32 tb_index = screen->x + x + global_terminal_width * (screen->y + y - screen->view_range_start + 1);
             tb_buffer[tb_index].ch = (u32)line.text->start[x];
             tb_buffer[tb_index].fg = TB_WHITE;
             if(y >= start && y < end)
@@ -340,9 +343,9 @@ void update_visual_screen(Buffer *screen, u32 start, u32 end)
         }
     }
 
-    for(u32 i = 0; i < tb_width(); i++)
+    for(u32 i = 0; i < global_terminal_width; i++)
     {
-        u32 index = i + tb_width() * (screen->y + screen->height - 1);
+        u32 index = i + global_terminal_width * (screen->y + screen->height - 1);
         tb_buffer[index].fg = TB_WHITE | TB_UNDERLINE;
     }
 
@@ -372,7 +375,7 @@ void update_search_screen(SearchBuffer *results)
         // TODO(Luke): Make this robust
         if(line.is_dir)
         {
-            u32 end_line = line.text->length + results->x + tb_width() * (y - results->view_range_start + results->y);
+            u32 end_line = line.text->length + results->x + global_terminal_width * (y - results->view_range_start + results->y);
             tb_buffer[end_line].ch = (u32)'/';
             tb_buffer[end_line].fg = TB_WHITE;
             tb_buffer[end_line].bg = y == results->current_line ? TB_BLUE : TB_BLACK;
@@ -381,7 +384,7 @@ void update_search_screen(SearchBuffer *results)
         u16 bg = y == results->current_line ? TB_MAGENTA : TB_WHITE;
         for(u32 x = 0; x < line.text->length; x++)
         {
-            u32 tb_index = x + results->x + tb_width() * (y - results->view_range_start + results->y);
+            u32 tb_index = x + results->x + global_terminal_width * (y - results->view_range_start + results->y);
             tb_buffer[tb_index].ch = (u32)line.text->start[x];
             u16 fg = y == results->current_line ? TB_WHITE : TB_BLACK;
             if((line.color_mask >> x) & 1) fg |= TB_BOLD;
@@ -390,7 +393,7 @@ void update_search_screen(SearchBuffer *results)
         }
         for(u32 x = line.text->length; x < results->width; x++)
         {
-            u32 tb_index = x + results->x + tb_width() * (y - results->view_range_start + results->y);
+            u32 tb_index = x + results->x + global_terminal_width * (y - results->view_range_start + results->y);
             tb_buffer[tb_index].ch = (u32)' ';
             tb_buffer[tb_index].bg = bg;
         }
@@ -663,7 +666,7 @@ void vertical_split(Buffer *buffer)
 
         update_screen(buffer);
         update_screen(buffer2);
-        draw_vertical_line(0, tb_height(), buffer->x + buffer->width);
+        draw_vertical_line(0, global_terminal_height, buffer->x + buffer->width);
     }
 }
 
@@ -706,6 +709,9 @@ void rename_file(String *filename, String *new_filename)
 int main()
 {
     tb_init();
+
+    global_terminal_width = tb_width();
+    global_terminal_height = tb_height();
     global_mode = NORMAL;
     struct tb_event event = {};
     getcwd(global_path, global_path_size);
@@ -716,8 +722,8 @@ int main()
     buf->capacity          = 100;
     buf->x                 = 2;
     buf->y                 = 0;
-    buf->width             = tb_width() - 10;
-    buf->height            = tb_height() - 1;
+    buf->width             = global_terminal_width - 10;
+    buf->height            = global_terminal_height - 1;
 
     load_directory(global_path, buf);
 
@@ -747,6 +753,44 @@ int main()
     while(running)
     {
         tb_poll_event(&event);
+        if(event.type == TB_EVENT_RESIZE)
+        {
+            //screen->width = event.w - 10;
+            //screen->height = event.h - 1;
+            //screen->view_range_start = 0;
+            //screen->view_range_end = screen->height - 1;
+            //tb_init();
+            //background(TB_BLACK);
+            //update_screen(screen);
+            
+            global_state_buffers[0]->width = event.w - 10;
+            global_state_buffers[0]->height = event.h - 1;
+            global_state_buffers[0]->view_range_start = 0;
+            global_state_buffers[0]->view_range_end = global_state_buffers[0]->height - 1;
+            global_terminal_width = event.w;
+            global_terminal_height = event.h;
+            
+            // Note(Luke): THIS IS NOT PERMANENT DON'T FORGET TO CHANGE THIS LATER WHEN YOU ALLOW MORE THAN 2 BUFFERS!!!
+            if(global_state_buffers[1])
+            {
+                global_state_buffers[0]->width /= 2;
+
+                global_state_buffers[1]->x = global_state_buffers[0]->x * 2 + global_state_buffers[0]->width;
+                global_state_buffers[1]->y = global_state_buffers[0]->y;
+                global_state_buffers[1]->width = global_state_buffers[0]->width;
+                global_state_buffers[1]->height = global_state_buffers[0]->height;
+                global_state_buffers[1]->view_range_start = 0;
+                global_state_buffers[1]->view_range_end = global_state_buffers[1]->height;
+            }
+            tb_shutdown();
+            tb_init();
+            background(TB_BLACK);
+            update_screen(global_state_buffers[0]);
+            update_screen(global_state_buffers[1]);
+            
+            continue;
+        }
+
         switch(global_mode)
         {
             case NORMAL:
